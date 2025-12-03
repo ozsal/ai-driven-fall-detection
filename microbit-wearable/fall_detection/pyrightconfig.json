@@ -1,0 +1,15 @@
+{
+  "reportMissingImports": false,
+  "reportMissingModuleSource": false,
+  "reportUndefinedVariable": false,
+  "reportMissingTypeStubs": false,
+  "pythonVersion": "3.4",
+  "typeCheckingMode": "off",
+  "include": [
+    "."
+  ],
+  "exclude": [
+    "**/__pycache__"
+  ]
+}
+

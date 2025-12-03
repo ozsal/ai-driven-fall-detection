@@ -1,0 +1,12 @@
+# Pylint configuration for Micro:bit code
+# This suppresses warnings for Micro:bit-specific modules that are only
+# available when running on the device or in Micro:bit Python environments
+
+[MESSAGES CONTROL]
+# Disable warnings for undefined names (Micro:bit runtime provides these)
+disable=undefined-variable,no-member,import-error
+
+[MASTER]
+# Ignore missing imports for Micro:bit modules
+ignore=missing-module-docstring
+

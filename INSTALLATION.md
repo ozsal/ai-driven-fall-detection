@@ -1,0 +1,352 @@
+# Installation Guide
+
+Complete installation guide for the AI-Driven Fall Detection System.
+
+## Table of Contents
+
+1. [System Requirements](#system-requirements)
+2. [Raspberry Pi Setup](#raspberry-pi-setup)
+3. [ESP8266 Setup](#esp8266-setup)
+4. [Micro:bit Setup](#microbit-setup)
+5. [Database Setup](#database-setup)
+6. [Web Dashboard Setup](#web-dashboard-setup)
+7. [Mobile App Setup](#mobile-app-setup)
+8. [Configuration](#configuration)
+9. [Testing](#testing)
+
+## System Requirements
+
+### Hardware
+- Raspberry Pi 4 (4GB RAM recommended)
+- ESP8266 NodeMCU v1.0 (2x for multiple rooms)
+- Micro:bit v2
+- PIR Motion Sensor (HC-SR501) - 2x
+- Ultrasonic Distance Sensor (HC-SR04) - 2x
+- DHT22 Temperature/Humidity Sensor - 2x
+- Resistors: 10kΩ, 1kΩ
+- Jumper wires, breadboards
+- 5V power supplies
+
+### Software
+- Raspberry Pi OS (latest)
+- Python 3.8+
+- Node.js 16+
+- Flutter SDK 3.0+
+- Arduino IDE
+- MongoDB
+- Mosquitto MQTT Broker
+
+## Raspberry Pi Setup
+
+### 1. Install Operating System
+```bash
+# Flash Raspberry Pi OS to SD card using Raspberry Pi Imager
+# Enable SSH and WiFi during setup
+```
+
+### 2. Update System
+```bash
+sudo apt-get update
+sudo apt-get upgrade -y
+```
+
+### 3. Install Dependencies
+```bash
+# Install Python and pip
+sudo apt-get install python3 python3-pip python3-venv -y
+
+# Install MongoDB
+wget -qO - https://www.mongodb.org/static/pgp/server-6.0.asc | sudo apt-key add -
+echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu focal/mongodb-org/6.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-6.0.list
+sudo apt-get update
+sudo apt-get install -y mongodb-org
+sudo systemctl start mongod
+sudo systemctl enable mongod
+
+# Install Mosquitto MQTT Broker
+sudo apt-get install mosquitto mosquitto-clients -y
+sudo systemctl start mosquitto
+sudo systemctl enable mosquitto
+
+# Install Node.js (for web dashboard)
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt-get install -y nodejs
+```
+
+### 4. Setup Backend
+```bash
+cd raspberry-pi-backend
+
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Configure environment
+cp .env.example .env
+nano .env  # Edit with your settings
+
+# Train ML model (optional)
+cd ml_models
+python train_model.py
+cd ..
+```
+
+### 5. Start Backend
+```bash
+cd api
+python main.py
+```
+
+Or use systemd service (see below).
+
+## ESP8266 Setup
+
+### 1. Install Arduino IDE
+- Download from https://www.arduino.cc/en/software
+- Install on your computer
+
+### 2. Add ESP8266 Board Support
+1. Open Arduino IDE
+2. File → Preferences → Additional Board Manager URLs
+3. Add: `http://arduino.esp8266.com/stable/package_esp8266com_index.json`
+4. Tools → Board → Boards Manager
+5. Search "ESP8266" → Install
+
+### 3. Install Libraries
+Sketch → Include Library → Manage Libraries → Install:
+- PubSubClient (by Nick O'Leary)
+- DHT sensor library (by Adafruit)
+- ArduinoJson (by Benoit Blanchon)
+
+### 4. Configure and Upload
+1. Open `esp8266-sensors/pir_ultrasonic_dht22/sensor_node.ino`
+2. Update WiFi credentials and MQTT server IP
+3. Connect ESP8266 via USB
+4. Select board: Tools → Board → NodeMCU 1.0 (ESP-12E Module)
+5. Select port: Tools → Port
+6. Upload: Sketch → Upload
+
+### 5. Test
+- Open Serial Monitor (115200 baud)
+- Verify WiFi connection
+- Check MQTT messages on broker
+
+## Micro:bit Setup
+
+### Option 1: MakeCode (Recommended)
+1. Go to https://makecode.microbit.org
+2. Click "New Project"
+3. Switch to Python mode
+4. Copy code from `microbit-wearable/fall_detection/main.py`
+5. Click "Download" → Flash to Micro:bit
+
+### Option 2: Mu Editor
+1. Install Mu Editor from https://codewith.mu/
+2. Connect Micro:bit via USB
+3. Open `main.py` from project
+4. Click "Flash" button
+
+### Testing
+- Press Button A to simulate fall
+- Press Button B to view accelerometer values
+- Watch for skull icon on fall detection
+
+## Database Setup
+
+### MongoDB Configuration
+```bash
+# MongoDB should already be running from installation
+# Create database and collections (auto-created on first use)
+
+# Connect to MongoDB shell
+mongosh
+
+# Create database
+use fall_detection_db
+
+# Collections will be created automatically by the application
+```
+
+### Verify Connection
+```bash
+# Test MongoDB connection
+mongosh --eval "db.version()"
+```
+
+## Web Dashboard Setup
+
+### 1. Install Dependencies
+```bash
+cd web-dashboard/react-app
+npm install
+```
+
+### 2. Configure
+Create `.env` file:
+```
+REACT_APP_API_URL=http://localhost:8000
+REACT_APP_WS_URL=ws://localhost:8000/ws
+```
+
+### 3. Run Development Server
+```bash
+npm start
+```
+
+Dashboard opens at http://localhost:3000
+
+### 4. Build for Production
+```bash
+npm run build
+# Serve with: npx serve -s build
+```
+
+## Mobile App Setup
+
+### 1. Install Flutter
+```bash
+# Follow Flutter installation guide for your OS
+# https://docs.flutter.dev/get-started/install
+```
+
+### 2. Setup Firebase
+1. Create Firebase project at https://console.firebase.google.com
+2. Add Android/iOS apps
+3. Download configuration files:
+   - `google-services.json` → `android/app/`
+   - `GoogleService-Info.plist` → `ios/Runner/`
+
+### 3. Install Dependencies
+```bash
+cd mobile-app/flutter-app
+flutter pub get
+```
+
+### 4. Run
+```bash
+# Android
+flutter run
+
+# iOS (macOS only)
+flutter run -d ios
+```
+
+## Configuration
+
+### MQTT Broker (Mosquitto)
+Edit `/etc/mosquitto/mosquitto.conf`:
+```
+listener 1883
+allow_anonymous false
+password_file /etc/mosquitto/passwd
+```
+
+Create password file:
+```bash
+sudo mosquitto_passwd -c /etc/mosquitto/passwd admin
+# Enter password
+```
+
+### Environment Variables
+Update `.env` files in:
+- `raspberry-pi-backend/.env`
+- `web-dashboard/react-app/.env`
+
+Key settings:
+- MongoDB connection string
+- MQTT broker credentials
+- Email SMTP settings
+- FCM push notification keys
+- API URLs
+
+## Testing
+
+### 1. Test MQTT Communication
+```bash
+# Subscribe to all topics
+mosquitto_sub -h localhost -t "#" -u admin -P your_password
+
+# Publish test message
+mosquitto_pub -h localhost -t "test/topic" -m "Hello" -u admin -P your_password
+```
+
+### 2. Test API
+```bash
+# Health check
+curl http://localhost:8000/health
+
+# Get statistics
+curl http://localhost:8000/api/statistics
+```
+
+### 3. Test Sensors
+- ESP8266: Check serial monitor for readings
+- Micro:bit: Press Button A to simulate fall
+- Verify data appears in dashboard
+
+### 4. Test Alerts
+- Trigger fall detection
+- Verify email sent
+- Verify push notification received
+- Check dashboard for event
+
+## Troubleshooting
+
+### ESP8266 Not Connecting
+- Check WiFi credentials
+- Verify MQTT broker IP address
+- Check serial monitor for errors
+
+### MongoDB Connection Failed
+- Verify MongoDB is running: `sudo systemctl status mongod`
+- Check connection string in `.env`
+- Verify network access
+
+### MQTT Messages Not Received
+- Check broker is running: `sudo systemctl status mosquitto`
+- Verify credentials
+- Check firewall rules
+
+### Dashboard Not Loading
+- Verify API is running
+- Check CORS settings
+- Verify WebSocket connection
+
+## Production Deployment
+
+### Systemd Service (Raspberry Pi)
+Create `/etc/systemd/system/fall-detection.service`:
+```ini
+[Unit]
+Description=Fall Detection System API
+After=network.target mongod.service mosquitto.service
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/AI-driven-fall-detection/raspberry-pi-backend/api
+Environment="PATH=/home/pi/AI-driven-fall-detection/raspberry-pi-backend/venv/bin"
+ExecStart=/home/pi/AI-driven-fall-detection/raspberry-pi-backend/venv/bin/python main.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start:
+```bash
+sudo systemctl enable fall-detection
+sudo systemctl start fall-detection
+sudo systemctl status fall-detection
+```
+
+## Support
+
+For issues or questions, check:
+- Documentation in `docs/` directory
+- README files in each component
+- GitHub issues (if applicable)
+

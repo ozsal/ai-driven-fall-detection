@@ -1,0 +1,31 @@
+/**
+ * Configuration File Template
+ * 
+ * Copy this file to config.h and update with your settings
+ */
+
+ #ifndef CONFIG_H
+ #define CONFIG_H
+ 
+ // WiFi Configuration
+ #define WIFI_SSID "Telnet"
+ #define WIFI_PASSWORD "@@Ozsal23##"
+ 
+ // MQTT Configuration
+ #define MQTT_SERVER "192.168.1.100"  // Raspberry Pi IP
+ #define MQTT_PORT 1883
+ #define MQTT_USER "esp8266_user"
+ #define MQTT_PASSWORD "esp8266_password"
+ #define MQTT_CLIENT_ID "ESP8266_Sensor_Node_01"
+ 
+ // Device Configuration
+ #define DEVICE_ID "ESP8266_NODE_01"
+ #define LOCATION "Living_Room"
+ 
+ // Sensor Intervals (milliseconds)
+ #define SENSOR_READ_INTERVAL 2000
+ #define MQTT_PUBLISH_INTERVAL 2000
+ 
+ #endif
+ 
+ 
