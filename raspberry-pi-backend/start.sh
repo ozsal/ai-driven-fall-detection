@@ -9,11 +9,7 @@ if [ -d "venv" ]; then
     source venv/bin/activate
 fi
 
-# Check if MongoDB is running
-if ! pgrep -x "mongod" > /dev/null; then
-    echo "Starting MongoDB..."
-    sudo systemctl start mongod
-fi
+# SQLite doesn't need a separate service - it's file-based
 
 # Check if Mosquitto MQTT broker is running
 if ! pgrep -x "mosquitto" > /dev/null; then

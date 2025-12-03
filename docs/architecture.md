@@ -32,7 +32,7 @@ The AI-Driven Fall Detection System uses a distributed IoT architecture with mul
 ┌─────────────────────────────▼───────────────────────────────────┐
 │                      DATA LAYER                                  │
 ├──────────────────────────────────────────────────────────────────┤
-│  MongoDB Database                                               │
+│  SQLite Database                                                │
 │  - Sensor readings                                              │
 │  - Fall events                                                  │
 │  - User profiles                                                │
@@ -84,12 +84,13 @@ The AI-Driven Fall Detection System uses a distributed IoT architecture with mul
   - Alert Manager
 - **Processing**: Multi-sensor fusion, fall severity scoring
 
-### 4. Database (MongoDB)
-- **Collections**:
+### 4. Database (SQLite)
+- **Tables**:
   - `sensor_readings`: Time-series sensor data
   - `fall_events`: Detected fall incidents
   - `users`: User profiles and preferences
   - `devices`: Device configurations
+  - `alert_logs`: Alert delivery logs
 
 ### 5. Web Dashboard
 - **Technology**: React + Chart.js
@@ -108,7 +109,7 @@ The AI-Driven Fall Detection System uses a distributed IoT architecture with mul
 
 2. **Data Processing**
    - Raspberry Pi subscribes to all MQTT topics
-   - Data stored in MongoDB
+   - Data stored in SQLite database file
    - Real-time analysis for fall detection
 
 3. **Fall Detection Algorithm**

@@ -29,12 +29,14 @@ Complete installation guide for the AI-Driven Fall Detection System.
 
 ### Software
 - Raspberry Pi OS (latest)
-- Python 3.8+
+- Python 3.9, 3.10, or 3.11 (Python 3.12+ not recommended)
 - Node.js 16+
 - Flutter SDK 3.0+
 - Arduino IDE
-- MongoDB
+- SQLite3 (included with Python)
 - Mosquitto MQTT Broker
+
+**Important**: Python 3.13 has compatibility issues with numpy and other packages. Use Python 3.11 or earlier.
 
 ## Raspberry Pi Setup
 
@@ -52,16 +54,16 @@ sudo apt-get upgrade -y
 
 ### 3. Install Dependencies
 ```bash
-# Install Python and pip
-sudo apt-get install python3 python3-pip python3-venv -y
+# Install Python and pip (use Python 3.11 or earlier)
+sudo apt-get install python3.11 python3.11-pip python3.11-venv -y
 
-# Install MongoDB
-wget -qO - https://www.mongodb.org/static/pgp/server-6.0.asc | sudo apt-key add -
-echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu focal/mongodb-org/6.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-6.0.list
-sudo apt-get update
-sudo apt-get install -y mongodb-org
-sudo systemctl start mongod
-sudo systemctl enable mongod
+# Or use system default (usually Python 3.9 on Raspberry Pi OS)
+# sudo apt-get install python3 python3-pip python3-venv -y
+
+# Verify Python version
+python3 --version  # Should be 3.9, 3.10, or 3.11
+
+# SQLite3 is included with Python - no separate installation needed
 
 # Install Mosquitto MQTT Broker
 sudo apt-get install mosquitto mosquitto-clients -y
@@ -81,8 +83,15 @@ cd raspberry-pi-backend
 python3 -m venv venv
 source venv/bin/activate
 
+# Upgrade pip, setuptools, and wheel first
+pip install --upgrade pip setuptools wheel
+
 # Install Python dependencies
+# If you encounter numpy/tensorflow errors, see INSTALL_TROUBLESHOOTING.md
 pip install -r requirements.txt
+
+# Alternative: Use minimal requirements (without heavy ML libraries)
+# pip install -r requirements-minimal.txt
 
 # Configure environment
 cp .env.example .env
@@ -156,24 +165,26 @@ Sketch → Include Library → Manage Libraries → Install:
 
 ## Database Setup
 
-### MongoDB Configuration
+### SQLite Configuration
 ```bash
-# MongoDB should already be running from installation
-# Create database and collections (auto-created on first use)
+# SQLite is file-based and doesn't require a separate service
+# The database file will be created automatically on first run
 
-# Connect to MongoDB shell
-mongosh
+# Database file location (default):
+# ./fall_detection.db
 
-# Create database
-use fall_detection_db
-
-# Collections will be created automatically by the application
+# You can configure the database path in .env:
+# DB_DIR=.
+# DB_NAME=fall_detection.db
 ```
 
-### Verify Connection
+### Verify Database
 ```bash
-# Test MongoDB connection
-mongosh --eval "db.version()"
+# Check if database file exists (after first run)
+ls -lh fall_detection.db
+
+# View database structure (optional - requires sqlite3 CLI)
+sqlite3 fall_detection.db ".tables"
 ```
 
 ## Web Dashboard Setup
@@ -256,7 +267,7 @@ Update `.env` files in:
 - `web-dashboard/react-app/.env`
 
 Key settings:
-- MongoDB connection string
+- SQLite database path (DB_DIR, DB_NAME)
 - MQTT broker credentials
 - Email SMTP settings
 - FCM push notification keys
@@ -300,10 +311,11 @@ curl http://localhost:8000/api/statistics
 - Verify MQTT broker IP address
 - Check serial monitor for errors
 
-### MongoDB Connection Failed
-- Verify MongoDB is running: `sudo systemctl status mongod`
-- Check connection string in `.env`
-- Verify network access
+### SQLite Database Issues
+- Verify database file permissions
+- Check database path in `.env`
+- Ensure directory exists for database file
+- Check disk space availability
 
 ### MQTT Messages Not Received
 - Check broker is running: `sudo systemctl status mosquitto`
@@ -322,7 +334,7 @@ Create `/etc/systemd/system/fall-detection.service`:
 ```ini
 [Unit]
 Description=Fall Detection System API
-After=network.target mongod.service mosquitto.service
+After=network.target mosquitto.service
 
 [Service]
 Type=simple

@@ -5,16 +5,18 @@ FastAPI backend for the Fall Detection System running on Raspberry Pi.
 ## Prerequisites
 
 - Raspberry Pi 4 (or compatible)
-- Python 3.8+
-- MongoDB installed and running
+- Python 3.9, 3.10, or 3.11 (Python 3.12+ may have compatibility issues)
+- SQLite3 (included with Python)
 - Mosquitto MQTT broker installed
+
+**Important**: Python 3.13 is not recommended due to compatibility issues with numpy and other packages. Use Python 3.11 or earlier.
 
 ## Installation
 
 1. Install system dependencies:
 ```bash
 sudo apt-get update
-sudo apt-get install python3-pip python3-venv mongodb mosquitto mosquitto-clients
+sudo apt-get install python3-pip python3-venv mosquitto mosquitto-clients
 ```
 
 2. Create virtual environment:
@@ -25,8 +27,18 @@ source venv/bin/activate
 
 3. Install Python dependencies:
 ```bash
+# For full installation (includes ML libraries)
 pip install -r requirements.txt
+
+# If you encounter issues with numpy/tensorflow, use minimal version:
+# pip install -r requirements-minimal.txt
 ```
+
+**Troubleshooting**: If you get errors installing numpy or tensorflow:
+- Use Python 3.9, 3.10, or 3.11 (not 3.12+)
+- Try: `pip install --upgrade pip setuptools wheel`
+- Install numpy separately: `pip install numpy==1.24.3`
+- For Raspberry Pi, consider using pre-built wheels: `pip install --only-binary :all: numpy`
 
 4. Configure environment:
 ```bash
@@ -34,11 +46,12 @@ cp .env.example .env
 # Edit .env with your settings
 ```
 
-5. Start MongoDB and Mosquitto:
+5. Start Mosquitto:
 ```bash
-sudo systemctl start mongod
 sudo systemctl start mosquitto
 ```
+
+Note: SQLite is file-based and doesn't require a separate service.
 
 ## Running
 

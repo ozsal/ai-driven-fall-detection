@@ -12,7 +12,12 @@ from datetime import datetime, timedelta
 import uvicorn
 from contextlib import asynccontextmanager
 
-from database.mongodb import get_database, init_database
+from database.sqlite_db import (
+    init_database, insert_sensor_reading, insert_fall_event,
+    get_sensor_readings, get_fall_events, get_fall_event,
+    acknowledge_fall_event, get_devices, get_recent_room_sensor_data,
+    count_fall_events, count_sensor_readings, count_active_devices
+)
 from mqtt_broker.mqtt_client import MQTTClient
 from ml_models.fall_detector import FallDetector
 from alerts.alert_manager import AlertManager
@@ -110,11 +115,12 @@ async def handle_mqtt_message(topic: str, payload: dict):
     """Process incoming MQTT messages"""
     try:
         # Store sensor reading in database
-        db = await get_database()
-        await db.sensor_readings.insert_one({
+        sensor_data = {
             **payload,
+            "topic": topic,
             "received_at": datetime.utcnow()
-        })
+        }
+        await insert_sensor_reading(sensor_data)
         
         # Check for fall detection if from wearable
         if "wearable" in topic or "MICROBIT" in payload.get("device_id", ""):
@@ -139,7 +145,7 @@ async def process_fall_detection(payload: dict):
     
     try:
         # Get room sensor data for verification
-        room_data = await get_recent_room_sensor_data()
+        room_data = await fetch_recent_room_sensor_data()
         
         # Run fall detection algorithm
         result = await fall_detector.detect_fall(
@@ -162,8 +168,7 @@ async def process_fall_detection(payload: dict):
             }
             
             # Save to database
-            db = await get_database()
-            event_id = str(await db.fall_events.insert_one(fall_event).inserted_id)
+            event_id = await insert_fall_event(fall_event)
             
             # Trigger alerts
             await alert_manager.send_fall_alert(fall_event, event_id)
@@ -178,16 +183,9 @@ async def process_fall_detection(payload: dict):
     except Exception as e:
         print(f"Error processing fall detection: {e}")
 
-async def get_recent_room_sensor_data():
+async def fetch_recent_room_sensor_data():
     """Get recent room sensor readings for verification"""
-    db = await get_database()
-    recent_readings = await db.sensor_readings.find({
-        "device_id": {"$regex": "ESP8266"},
-        "received_at": {
-            "$gte": datetime.utcnow() - timedelta(seconds=30)
-        }
-    }).sort("received_at", -1).limit(10).to_list(length=10)
-    
+    recent_readings = await get_recent_room_sensor_data(seconds=30)
     return recent_readings
 
 # ==================== WebSocket Manager ====================
@@ -228,8 +226,7 @@ async def health_check():
 @app.get("/api/devices", response_model=List[DeviceStatus])
 async def get_devices():
     """Get all device statuses"""
-    db = await get_database()
-    devices = await db.devices.find().to_list(length=100)
+    devices = await get_devices()
     return devices
 
 @app.get("/api/sensor-readings")
@@ -239,15 +236,11 @@ async def get_sensor_readings(
     limit: int = 100
 ):
     """Get sensor readings with optional filters"""
-    db = await get_database()
-    query = {}
-    
-    if device_id:
-        query["device_id"] = device_id
-    if sensor_type:
-        query["sensor_type"] = sensor_type
-    
-    readings = await db.sensor_readings.find(query).sort("timestamp", -1).limit(limit).to_list(length=limit)
+    readings = await get_sensor_readings(
+        device_id=device_id,
+        sensor_type=sensor_type,
+        limit=limit
+    )
     return readings
 
 @app.get("/api/fall-events")
@@ -256,39 +249,24 @@ async def get_fall_events(
     limit: int = 50
 ):
     """Get fall events"""
-    db = await get_database()
-    query = {}
-    
-    if user_id:
-        query["user_id"] = user_id
-    
-    events = await db.fall_events.find(query).sort("timestamp", -1).limit(limit).to_list(length=limit)
+    events = await get_fall_events(user_id=user_id, limit=limit)
     return events
 
 @app.get("/api/fall-events/{event_id}")
 async def get_fall_event(event_id: str):
     """Get specific fall event"""
-    db = await get_database()
-    from bson import ObjectId
-    
-    event = await db.fall_events.find_one({"_id": ObjectId(event_id)})
+    event = await get_fall_event(event_id)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     
     return event
 
 @app.post("/api/fall-events/{event_id}/acknowledge")
-async def acknowledge_fall_event(event_id: str):
+async def acknowledge_fall_event_endpoint(event_id: str):
     """Acknowledge a fall event"""
-    db = await get_database()
-    from bson import ObjectId
+    result = await acknowledge_fall_event(event_id)
     
-    result = await db.fall_events.update_one(
-        {"_id": ObjectId(event_id)},
-        {"$set": {"acknowledged": True, "acknowledged_at": datetime.utcnow()}}
-    )
-    
-    if result.matched_count == 0:
+    if not result:
         raise HTTPException(status_code=404, detail="Event not found")
     
     return {"message": "Event acknowledged", "event_id": event_id}
@@ -311,14 +289,12 @@ async def websocket_endpoint(websocket: WebSocket):
 @app.get("/api/statistics")
 async def get_statistics():
     """Get system statistics"""
-    db = await get_database()
-    
-    total_events = await db.fall_events.count_documents({})
-    recent_events = await db.fall_events.count_documents({
-        "timestamp": {"$gte": datetime.utcnow() - timedelta(days=7)}
+    total_events = await count_fall_events()
+    recent_events = await count_fall_events({
+        "timestamp_gte": datetime.utcnow() - timedelta(days=7)
     })
-    total_readings = await db.sensor_readings.count_documents({})
-    active_devices = await db.devices.count_documents({"status": "online"})
+    total_readings = await count_sensor_readings()
+    active_devices = await count_active_devices()
     
     return {
         "total_fall_events": total_events,

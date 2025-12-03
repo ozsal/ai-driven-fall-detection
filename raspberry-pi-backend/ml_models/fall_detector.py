@@ -3,11 +3,18 @@ Fall Detection AI/ML Model
 Implements multi-sensor fusion and fall severity scoring
 """
 
-import numpy as np
+try:
+    import numpy as np
+    HAS_NUMPY = True
+except ImportError:
+    HAS_NUMPY = False
+    # Fallback: use math for basic calculations
+    import math
+
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 import asyncio
-from database.mongodb import get_database
+from database.sqlite_db import get_recent_room_sensor_data
 
 class FallDetector:
     """Fall detection using multi-sensor fusion"""
@@ -93,11 +100,11 @@ class FallDetector:
             magnitude = wearable_data["accel_magnitude"]
         elif "sensors" in wearable_data and "accelerometer" in wearable_data["sensors"]:
             accel = wearable_data["sensors"]["accelerometer"]
-            magnitude = np.sqrt(
-                accel.get("x", 0)**2 +
-                accel.get("y", 0)**2 +
-                accel.get("z", 0)**2
-            )
+            x, y, z = accel.get("x", 0), accel.get("y", 0), accel.get("z", 0)
+            if HAS_NUMPY:
+                magnitude = np.sqrt(x**2 + y**2 + z**2)
+            else:
+                magnitude = math.sqrt(x**2 + y**2 + z**2)
         else:
             magnitude = 0
         

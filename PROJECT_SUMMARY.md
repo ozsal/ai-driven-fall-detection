@@ -41,7 +41,7 @@ AI-driven-fall-detection/
 │   │   └── __init__.py
 │   │
 │   ├── database/                      # Database layer
-│   │   ├── mongodb.py                 # MongoDB connection
+│   │   ├── sqlite_db.py              # SQLite database connection
 │   │   └── __init__.py
 │   │
 │   ├── mqtt_broker/                   # MQTT client
@@ -117,7 +117,7 @@ AI-driven-fall-detection/
 - **Multi-Channel**: Simultaneous alerts across all channels
 
 ### 5. Data Management
-- **MongoDB Database**: Time-series sensor data storage
+- **SQLite Database**: File-based time-series sensor data storage
 - **Event Logging**: Complete fall event history
 - **Device Management**: Track and monitor all devices
 
@@ -130,7 +130,7 @@ AI-driven-fall-detection/
 - **Sensors**: PIR, HC-SR04, DHT22
 
 ### Software
-- **Backend**: Python 3.8+, FastAPI, MongoDB, Mosquitto MQTT
+- **Backend**: Python 3.8+, FastAPI, SQLite3, Mosquitto MQTT
 - **Web Dashboard**: React, Chart.js, Material-UI
 - **Mobile App**: Flutter, Firebase
 - **ML/AI**: scikit-learn, TensorFlow (optional)
@@ -175,7 +175,7 @@ AI-driven-fall-detection/
 See [INSTALLATION.md](INSTALLATION.md) for complete setup instructions.
 
 Quick start:
-1. Setup Raspberry Pi with MongoDB and Mosquitto
+1. Setup Raspberry Pi with SQLite and Mosquitto
 2. Upload ESP8266 sensor code
 3. Flash Micro:bit with wearable code
 4. Configure environment variables
@@ -205,7 +205,7 @@ Key configuration files:
 - Configure firewall rules
 - Enable SSL/TLS for MQTT
 - Set up reverse proxy for API
-- Configure backup for MongoDB
+- Configure backup for SQLite database file
 - Monitor system health
 
 ## Security Considerations

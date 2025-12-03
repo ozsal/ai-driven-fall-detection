@@ -207,15 +207,8 @@ Fall Detection System
     async def _log_alert_status(self, event_id: str, channels: List[str]):
         """Log alert status to database"""
         try:
-            from database.mongodb import get_database
-            
-            db = await get_database()
-            await db.alert_logs.insert_one({
-                "event_id": event_id,
-                "channels": channels,
-                "sent_at": datetime.utcnow(),
-                "status": "sent"
-            })
+            from database.sqlite_db import insert_alert_log
+            await insert_alert_log(event_id, channels, "sent")
         except Exception as e:
             print(f"Error logging alert status: {e}")
 
