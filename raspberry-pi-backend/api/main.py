@@ -20,11 +20,13 @@ from database.sqlite_db import (
 )
 from mqtt_broker.mqtt_client import MQTTClient
 from ml_models.fall_detector import FallDetector
+from ml_models.environment_advisor import EnvironmentAdvisor
 from alerts.alert_manager import AlertManager
 
 # ==================== Global Variables ====================
 mqtt_client: Optional[MQTTClient] = None
 fall_detector: Optional[FallDetector] = None
+environment_advisor: Optional[EnvironmentAdvisor] = None
 alert_manager: Optional[AlertManager] = None
 websocket_connections: List[WebSocket] = []
 
@@ -59,7 +61,7 @@ class AlertResponse(BaseModel):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize and cleanup resources"""
-    global mqtt_client, fall_detector, alert_manager
+    global mqtt_client, fall_detector, environment_advisor, alert_manager
     
     # Startup
     print("Initializing Fall Detection System...")
@@ -77,6 +79,10 @@ async def lifespan(app: FastAPI):
     fall_detector = FallDetector()
     await fall_detector.load_model()
     print("Fall detector model loaded")
+    
+    # Initialize environment advisor
+    environment_advisor = EnvironmentAdvisor()
+    print("Environment advisor initialized")
     
     # Initialize alert manager
     alert_manager = AlertManager()
@@ -122,9 +128,10 @@ async def handle_mqtt_message(topic: str, payload: dict):
         }
         await insert_sensor_reading(sensor_data)
         
-        # Check for fall detection if from wearable
-        if "wearable" in topic or "MICROBIT" in payload.get("device_id", ""):
-            await process_fall_detection(payload)
+        # Check for fall detection based on room sensors
+        # Trigger analysis when we receive ESP8266 sensor data
+        if "sensors" in topic or "ESP8266" in payload.get("device_id", ""):
+            await process_fall_detection()
         
         # Broadcast to WebSocket connections
         await broadcast_to_websockets({
@@ -136,32 +143,37 @@ async def handle_mqtt_message(topic: str, payload: dict):
     except Exception as e:
         print(f"Error handling MQTT message: {e}")
 
-async def process_fall_detection(payload: dict):
-    """Process potential fall detection"""
+async def process_fall_detection():
+    """Process potential fall detection using room sensors only"""
     global fall_detector, alert_manager
     
     if not fall_detector or not alert_manager:
         return
     
     try:
-        # Get room sensor data for verification
+        # Get recent room sensor data for analysis
         room_data = await fetch_recent_room_sensor_data()
         
-        # Run fall detection algorithm
+        # Need minimum data points for reliable detection
+        if len(room_data) < 3:
+            return
+        
+        # Run fall detection algorithm (room sensors only)
         result = await fall_detector.detect_fall(
-            wearable_data=payload,
             room_sensor_data=room_data
         )
         
         if result["fall_detected"]:
+            # Get device ID from most recent sensor reading
+            device_id = room_data[0].get("device_id", "unknown") if room_data else "unknown"
+            
             # Create fall event
             fall_event = {
-                "user_id": payload.get("device_id", "unknown"),
+                "user_id": device_id,  # Using device_id instead of user_id
                 "timestamp": datetime.utcnow(),
                 "severity_score": result["severity_score"],
                 "verified": result["verified"],
                 "sensor_data": {
-                    "wearable": payload,
                     "room_sensors": room_data
                 },
                 "location": result.get("location", "unknown")
@@ -286,22 +298,64 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         websocket_connections.remove(websocket)
 
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {
+        "status": "healthy",
+        "service": "Fall Detection System API",
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
 @app.get("/api/statistics")
 async def get_statistics():
     """Get system statistics"""
-    total_events = await count_fall_events()
-    recent_events = await count_fall_events({
-        "timestamp_gte": datetime.utcnow() - timedelta(days=7)
-    })
-    total_readings = await count_sensor_readings()
-    active_devices = await count_active_devices()
+    try:
+        total_events = await count_fall_events()
+        
+        # Calculate recent events (last 7 days)
+        seven_days_ago = datetime.utcnow() - timedelta(days=7)
+        recent_events = await count_fall_events({
+            "timestamp_gte": seven_days_ago
+        })
+        
+        total_readings = await count_sensor_readings()
+        active_devices = await count_active_devices()
+        
+        return {
+            "total_fall_events": total_events,
+            "recent_events_7d": recent_events,
+            "total_sensor_readings": total_readings,
+            "active_devices": active_devices
+        }
+    except Exception as e:
+        print(f"Error in get_statistics: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error retrieving statistics: {str(e)}")
+
+@app.get("/api/environment/recommendations")
+async def get_environment_recommendations(
+    device_id: Optional[str] = None,
+    hours: int = 24
+):
+    """Get environment recommendations based on sensor data analysis"""
+    global environment_advisor
     
-    return {
-        "total_fall_events": total_events,
-        "recent_events_7d": recent_events,
-        "total_sensor_readings": total_readings,
-        "active_devices": active_devices
-    }
+    if environment_advisor is None:
+        environment_advisor = EnvironmentAdvisor()
+    
+    try:
+        recommendations = await environment_advisor.analyze_environment(
+            device_id=device_id,
+            hours=hours
+        )
+        return recommendations
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error analyzing environment: {str(e)}"
+        )
 
 # ==================== Run Server ====================
 if __name__ == "__main__":
