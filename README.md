@@ -1,14 +1,13 @@
 # AI-Driven Fall Detection System
 
-A comprehensive IoT + AI-based fall detection system using Raspberry Pi, ESP8266 sensors, and Micro:bit wearable device.
+A comprehensive IoT + AI-based fall detection system using Raspberry Pi and ESP8266 sensor nodes with PIR, Ultrasonic, and DHT22 sensors.
 
 ## 🏗️ System Architecture
 
 The system consists of:
 - **ESP8266 Sensor Nodes**: PIR motion sensor, Ultrasonic sensor, DHT22 (temperature/humidity)
-- **Micro:bit Wearable**: Accelerometer-based fall detection with TinyML
 - **Raspberry Pi Backend**: MQTT broker, FastAPI server, AI inference engine
-- **Database**: MongoDB for data storage
+- **Database**: SQLite for data storage
 - **Frontend**: React web dashboard and Flutter mobile app
 - **Alert System**: Push notifications and email alerts
 
@@ -19,8 +18,6 @@ AI-driven-fall-detection/
 ├── esp8266-sensors/
 │   ├── pir_ultrasonic_dht22/
 │   └── mqtt_client/
-├── microbit-wearable/
-│   └── fall_detection/
 ├── raspberry-pi-backend/
 │   ├── api/
 │   ├── mqtt_broker/
@@ -41,12 +38,11 @@ AI-driven-fall-detection/
 
 ### Prerequisites
 - Raspberry Pi 4 (or compatible)
-- ESP8266 development boards (NodeMCU or similar)
-- Micro:bit v2
-- Sensors: PIR, HC-SR04 Ultrasonic, DHT22
-- Python 3.8+
+- ESP8266 development boards (NodeMCU or similar) - 2x recommended
+- Sensors: PIR (HC-SR501), HC-SR04 Ultrasonic, DHT22 - 2 sets
+- Python 3.11 or 3.12
 - Node.js 16+
-- Flutter SDK
+- Flutter SDK (for mobile app)
 
 ### Installation
 
@@ -61,11 +57,7 @@ AI-driven-fall-detection/
    - Install ESP8266 board support
    - Upload sensor node code
 
-3. **Micro:bit Setup**
-   - Use MakeCode or MicroPython
-   - Flash wearable code
-
-4. **Web Dashboard**
+3. **Web Dashboard**
    ```bash
    cd web-dashboard/react-app
    npm install

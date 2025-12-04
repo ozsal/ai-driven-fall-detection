@@ -1,6 +1,7 @@
 """
 Fall Detection Model Training Script
-Trains a machine learning model for fall detection using accelerometer data
+Trains a machine learning model for fall detection using room sensor data
+(PIR motion, ultrasonic distance, temperature/humidity patterns)
 """
 
 import numpy as np
@@ -102,4 +103,6 @@ if __name__ == "__main__":
     print("=== Fall Detection Model Training ===")
     model = train_fall_detection_model()
     print("\nTraining complete!")
+
+
 

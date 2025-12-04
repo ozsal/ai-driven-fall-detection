@@ -322,33 +322,59 @@ async def get_recent_room_sensor_data(seconds: int = 30) -> List[Dict]:
 async def count_fall_events(filters: Optional[Dict] = None) -> int:
     """Count fall events with optional filters"""
     async with await get_database() as db:
+        db.row_factory = dict_factory
         query = "SELECT COUNT(*) as count FROM fall_events WHERE 1=1"
         params = []
         
         if filters:
             if "timestamp_gte" in filters:
+                timestamp_value = filters["timestamp_gte"]
+                if isinstance(timestamp_value, datetime):
+                    timestamp_str = timestamp_value.isoformat()
+                else:
+                    timestamp_str = str(timestamp_value)
                 query += " AND timestamp >= ?"
-                params.append(filters["timestamp_gte"].isoformat() if isinstance(filters["timestamp_gte"], datetime) else filters["timestamp_gte"])
+                params.append(timestamp_str)
         
         cursor = await db.execute(query, params)
         row = await cursor.fetchone()
-        return row[0] if row else 0
+        # Handle both tuple and dict results
+        if isinstance(row, dict):
+            return row.get("count", 0)
+        elif isinstance(row, tuple):
+            return row[0] if row else 0
+        else:
+            return 0
 
 async def count_sensor_readings() -> int:
     """Count total sensor readings"""
     async with await get_database() as db:
+        db.row_factory = dict_factory
         cursor = await db.execute("SELECT COUNT(*) as count FROM sensor_readings")
         row = await cursor.fetchone()
-        return row[0] if row else 0
+        # Handle both tuple and dict results
+        if isinstance(row, dict):
+            return row.get("count", 0)
+        elif isinstance(row, tuple):
+            return row[0] if row else 0
+        else:
+            return 0
 
 async def count_active_devices() -> int:
     """Count active devices"""
     async with await get_database() as db:
+        db.row_factory = dict_factory
         cursor = await db.execute(
             "SELECT COUNT(*) as count FROM devices WHERE status = 'online'"
         )
         row = await cursor.fetchone()
-        return row[0] if row else 0
+        # Handle both tuple and dict results
+        if isinstance(row, dict):
+            return row.get("count", 0)
+        elif isinstance(row, tuple):
+            return row[0] if row else 0
+        else:
+            return 0
 
 async def insert_alert_log(event_id: str, channels: List[str], status: str = "sent"):
     """Insert alert log"""

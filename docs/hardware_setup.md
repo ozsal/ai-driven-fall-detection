@@ -5,7 +5,6 @@
 ### Required Components
 - Raspberry Pi 4 (4GB RAM recommended)
 - ESP8266 NodeMCU v1.0 (2x for multiple rooms)
-- Micro:bit v2
 - PIR Motion Sensor (HC-SR501 or similar) - 2x
 - Ultrasonic Distance Sensor (HC-SR04) - 2x
 - DHT22 Temperature/Humidity Sensor - 2x
@@ -92,32 +91,6 @@ ESP8266 NodeMCU Pinout:
 ### ESP8266 Node 2 (Second Room)
 Use the same pin configuration as Node 1. Each node will have a unique device ID.
 
-## Micro:bit Wearable Setup
-
-### Micro:bit v2 Specifications
-- **Accelerometer**: 3-axis, ±2g/±4g/±8g range
-- **Communication**: BLE 4.0, Radio
-- **Power**: USB or battery pack (2x AAA)
-
-### Connection Diagram
-```
-┌─────────────────────────────────────────┐
-│         Micro:bit v2                    │
-│                                         │
-│  Built-in Components:                  │
-│  - 3-axis Accelerometer (LSM303)        │
-│  - Bluetooth Low Energy                 │
-│  - 5x5 LED Matrix                       │
-│  - Buttons A & B                        │
-│                                         │
-│  External (Optional):                   │
-│  - Battery Pack (2x AAA)                │
-│  - USB Cable for programming            │
-└─────────────────────────────────────────┘
-```
-
-**No external connections needed** - Micro:bit uses built-in accelerometer.
-
 ## Raspberry Pi Setup
 
 ### Required Connections
@@ -136,11 +109,6 @@ Use the same pin configuration as Node 1. Each node will have a unique device ID
 - **Input**: 5V via USB or external power
 - **Current**: ~200-300mA during operation
 - **Power Supply**: USB adapter (5V, 1A minimum)
-
-### Micro:bit
-- **Input**: 3V via USB or battery pack
-- **Current**: ~30-50mA typical
-- **Battery**: 2x AAA batteries (3V)
 
 ### Raspberry Pi 4
 - **Input**: 5V via USB-C
@@ -168,11 +136,6 @@ Each ESP8266 node needs:
 - **Ultrasonic**: Pointed downward at 45° angle
 - **Location**: One per room to monitor
 
-### Micro:bit Wearable
-- **Position**: Attach to user's belt or chest
-- **Orientation**: Keep accelerometer axes aligned with body
-- **Range**: Within WiFi/BLE range of gateway
-
 ## Testing Checklist
 
 1. ✅ ESP8266 powers on (LED indicator)
@@ -181,8 +144,7 @@ Each ESP8266 node needs:
 4. ✅ PIR sensor detects motion
 5. ✅ Ultrasonic sensor reads distance
 6. ✅ DHT22 reads temperature/humidity
-7. ✅ Micro:bit accelerometer responds
-8. ✅ Data appears in MQTT broker
+7. ✅ Data appears in MQTT broker
 9. ✅ Raspberry Pi receives sensor data
 10. ✅ Database stores readings
 
@@ -193,11 +155,7 @@ Each ESP8266 node needs:
 - **Sensor not reading**: Verify pin connections, power supply
 - **MQTT connection failed**: Check broker IP, port 1883, credentials
 
-### Micro:bit Issues
-- **Accelerometer not working**: Check code, reset device
-- **BLE not connecting**: Ensure BLE is enabled in code
-
 ### Raspberry Pi Issues
 - **MQTT broker not starting**: Check Mosquitto installation, port availability
-- **Database connection failed**: Verify MongoDB service, connection string
+- **Database connection failed**: Verify SQLite database file permissions and path
 

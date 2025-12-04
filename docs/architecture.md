@@ -47,18 +47,18 @@ The AI-Driven Fall Detection System uses a distributed IoT architecture with mul
 │  - sensors/pir/{device_id}                                      │
 │  - sensors/ultrasonic/{device_id}                               │
 │  - sensors/dht22/{device_id}                                    │
-│  - wearable/accelerometer/{device_id}                           │
-│  - alerts/fall/{device_id}                                      │
+│  - sensors/combined/{device_id}                                 │
+│  - devices/{device_id}/status                                  │
 └─────────────────────────────┬───────────────────────────────────┘
                               │
 ┌─────────────────────────────▼───────────────────────────────────┐
 │                      SENSOR LAYER                                │
-├──────────────────────┬──────────────────┬───────────────────────┤
-│  ESP8266 Node 1      │  ESP8266 Node 2  │  Micro:bit Wearable   │
-│  - PIR Sensor        │  - PIR Sensor    │  - Accelerometer      │
-│  - Ultrasonic        │  - Ultrasonic    │  - TinyML Model       │
-│  - DHT22             │  - DHT22         │  - BLE Communication  │
-└──────────────────────┴──────────────────┴───────────────────────┘
+├──────────────────────┬──────────────────┐
+│  ESP8266 Node 1      │  ESP8266 Node 2  │
+│  - PIR Sensor        │  - PIR Sensor    │
+│  - Ultrasonic        │  - Ultrasonic    │
+│  - DHT22             │  - DHT22         │
+└──────────────────────┴──────────────────┘
 ```
 
 ## Component Details
@@ -69,13 +69,7 @@ The AI-Driven Fall Detection System uses a distributed IoT architecture with mul
 - **Communication**: WiFi + MQTT
 - **Update Rate**: 1-2 seconds
 
-### 2. Micro:bit Wearable
-- **Function**: Personal fall detection
-- **Sensors**: 3-axis accelerometer
-- **Processing**: On-device TinyML inference
-- **Communication**: BLE to gateway or direct WiFi
-
-### 3. Raspberry Pi Backend
+### 2. Raspberry Pi Backend
 - **Function**: Central processing unit
 - **Services**: 
   - MQTT Broker (Mosquitto)
@@ -84,7 +78,7 @@ The AI-Driven Fall Detection System uses a distributed IoT architecture with mul
   - Alert Manager
 - **Processing**: Multi-sensor fusion, fall severity scoring
 
-### 4. Database (SQLite)
+### 3. Database (SQLite)
 - **Tables**:
   - `sensor_readings`: Time-series sensor data
   - `fall_events`: Detected fall incidents
@@ -92,11 +86,11 @@ The AI-Driven Fall Detection System uses a distributed IoT architecture with mul
   - `devices`: Device configurations
   - `alert_logs`: Alert delivery logs
 
-### 5. Web Dashboard
+### 4. Web Dashboard
 - **Technology**: React + Chart.js
 - **Features**: Real-time graphs, device management, alert history
 
-### 6. Mobile App
+### 5. Mobile App
 - **Technology**: Flutter
 - **Features**: Push notifications, emergency contacts, quick alerts
 
@@ -104,7 +98,7 @@ The AI-Driven Fall Detection System uses a distributed IoT architecture with mul
 
 1. **Sensor Data Collection**
    - ESP8266 nodes read sensors every 1-2 seconds
-   - Micro:bit samples accelerometer at 50Hz
+   - PIR motion, ultrasonic distance, and DHT22 temperature/humidity data
    - Data published to MQTT topics
 
 2. **Data Processing**
@@ -113,13 +107,13 @@ The AI-Driven Fall Detection System uses a distributed IoT architecture with mul
    - Real-time analysis for fall detection
 
 3. **Fall Detection Algorithm**
-   - **Step 1**: Micro:bit accelerometer detects potential fall
-   - **Step 2**: Verify with room sensors:
-     - PIR: No motion detected (person on ground)
+   - **Step 1**: Analyze room sensor patterns:
+     - PIR: No motion detected for extended period (person on ground)
      - Ultrasonic: Distance < threshold (person near ground)
-     - DHT22: Sudden temp/humidity change (door opening, etc.)
-   - **Step 3**: Calculate fall severity score
-   - **Step 4**: Trigger alerts if confirmed
+     - DHT22: Sudden temp/humidity change (door opening, movement, etc.)
+   - **Step 2**: Calculate fall severity score based on sensor fusion
+   - **Step 3**: Verify with multiple sensor readings
+   - **Step 4**: Trigger alerts if fall detected
 
 4. **Alert System**
    - Push notification to mobile app
@@ -132,16 +126,14 @@ The AI-Driven Fall Detection System uses a distributed IoT architecture with mul
 The system uses a multi-factor scoring model:
 
 ```
-Severity Score = (Accelerometer Score × 0.4) + 
-                 (Room Verification Score × 0.3) + 
-                 (Duration Score × 0.2) + 
-                 (Environmental Score × 0.1)
+Severity Score = (Room Verification Score × 0.5) + 
+                 (Duration Score × 0.3) + 
+                 (Environmental Score × 0.2)
 
 Where:
-- Accelerometer Score: Based on impact magnitude and pattern
-- Room Verification Score: PIR inactivity + ultrasonic distance
-- Duration Score: Time since last movement
-- Environmental Score: Temperature/humidity changes
+- Room Verification Score: PIR inactivity + ultrasonic distance (0-10)
+- Duration Score: Time since last movement detected (0-10)
+- Environmental Score: Temperature/humidity changes indicating activity (0-10)
 ```
 
 ## Security Considerations

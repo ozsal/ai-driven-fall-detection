@@ -6,10 +6,9 @@ Get the Fall Detection System up and running quickly.
 
 - [ ] Raspberry Pi 4 with Raspberry Pi OS installed
 - [ ] ESP8266 NodeMCU boards (2x)
-- [ ] Micro:bit v2
 - [ ] Sensors: PIR (2x), HC-SR04 (2x), DHT22 (2x)
 - [ ] WiFi network access
-- [ ] Computer for programming ESP8266 and Micro:bit
+- [ ] Computer for programming ESP8266
 
 ## 5-Minute Setup
 
@@ -35,10 +34,9 @@ pip install -r requirements.txt
 
 # Configure
 cp .env.example .env
-nano .env  # Update MQTT and MongoDB settings
+nano .env  # Update MQTT and database settings
 
 # Start services
-sudo systemctl start mongod
 sudo systemctl start mosquitto
 
 # Start API
@@ -57,15 +55,7 @@ python main.py
 7. Upload code
 8. Check Serial Monitor (115200 baud)
 
-### Step 3: Micro:bit (5 minutes)
-
-1. Go to https://makecode.microbit.org
-2. Switch to Python mode
-3. Copy code from `microbit-wearable/fall_detection/main.py`
-4. Download and flash to Micro:bit
-5. Test with Button A (simulates fall)
-
-### Step 4: Web Dashboard (5 minutes)
+### Step 3: Web Dashboard (5 minutes)
 
 ```bash
 cd web-dashboard/react-app
@@ -80,7 +70,7 @@ npm start
 
 Open http://localhost:3000
 
-### Step 5: Mobile App (10 minutes)
+### Step 4: Mobile App (10 minutes)
 
 ```bash
 cd mobile-app/flutter-app
@@ -109,8 +99,11 @@ curl http://localhost:8000/api/statistics
 ```
 
 ### Test Fall Detection
-1. Press Button A on Micro:bit (simulates fall)
-2. Check dashboard for event
+1. Simulate fall scenario:
+   - Cover PIR sensor (no motion detected)
+   - Place object within 50cm of ultrasonic sensor
+   - Wait for extended period (10+ seconds)
+2. Check dashboard for fall event
 3. Verify email alert (if configured)
 4. Check mobile app notification
 

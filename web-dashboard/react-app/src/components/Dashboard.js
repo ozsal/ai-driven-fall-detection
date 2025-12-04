@@ -30,6 +30,7 @@ import { useWebSocket } from '../context/WebSocketContext';
 import axios from 'axios';
 import { API_BASE_URL } from '../config';
 import { format } from 'date-fns';
+import EnvironmentRecommendations from './EnvironmentRecommendations';
 
 ChartJS.register(
   CategoryScale,
@@ -213,6 +214,11 @@ const Dashboard = () => {
         </Grid>
       </Grid>
 
+      {/* Environment Recommendations */}
+      <Paper sx={{ p: 3, mt: 3 }}>
+        <EnvironmentRecommendations />
+      </Paper>
+
       {/* Recent Events List */}
       <Paper sx={{ p: 2, mt: 3 }}>
         <Typography variant="h6" gutterBottom>
@@ -240,4 +246,6 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
+
+
 

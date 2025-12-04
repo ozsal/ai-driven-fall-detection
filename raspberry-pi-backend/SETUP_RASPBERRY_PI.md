@@ -309,9 +309,8 @@ chmod 755 ~/ai-driven-fall-detection/raspberry-pi-backend
 ## Next Steps
 
 1. ✅ **Configure ESP8266 sensors** - See `esp8266-sensors/` directory
-2. ✅ **Setup Micro:bit wearable** - See `microbit-wearable/` directory
-3. ✅ **Configure web dashboard** - See `web-dashboard/` directory
-4. ✅ **Setup mobile app** - See `mobile-app/` directory
+2. ✅ **Configure web dashboard** - See `web-dashboard/` directory
+3. ✅ **Setup mobile app** - See `mobile-app/` directory
 
 ## Support
 
@@ -327,4 +326,6 @@ chmod 755 ~/ai-driven-fall-detection/raspberry-pi-backend
 3. **Enable firewall** if exposing to network
 4. **Use HTTPS** in production (requires reverse proxy)
 5. **Regular updates**: `sudo apt-get update && sudo apt-get upgrade`
+
+
 

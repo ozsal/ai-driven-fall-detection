@@ -25,11 +25,6 @@ AI-driven-fall-detection/
 │   └── mqtt_client/
 │       └── README.md                 # MQTT setup guide
 │
-├── microbit-wearable/                 # Micro:bit wearable device
-│   └── fall_detection/
-│       ├── main.py                    # Fall detection code
-│       └── README.md                  # Micro:bit setup guide
-│
 ├── raspberry-pi-backend/              # Raspberry Pi backend
 │   ├── requirements.txt               # Python dependencies
 │   ├── .env.example                   # Environment variables template
@@ -96,13 +91,13 @@ AI-driven-fall-detection/
 ## Key Features
 
 ### 1. Multi-Sensor Fall Detection
-- **Wearable Device (Micro:bit)**: Accelerometer-based detection with on-device processing
 - **Room Sensors (ESP8266)**: PIR motion, ultrasonic distance, temperature/humidity
-- **Sensor Fusion**: Combines multiple sensor inputs for accurate detection
+- **Multi-Sensor Fusion**: Combines PIR, ultrasonic, and environmental sensors for accurate detection
+- **Pattern Analysis**: Detects fall patterns based on motion inactivity and proximity to ground
 
 ### 2. AI/ML Fall Detection
 - **Severity Scoring**: 0-10 scale based on multiple factors
-- **Multi-Sensor Verification**: Cross-validates wearable alerts with room sensors
+- **Multi-Sensor Verification**: Cross-validates fall detection using multiple room sensors
 - **Pattern Recognition**: Detects fall patterns vs. normal activities
 
 ### 3. Real-Time Monitoring
@@ -125,9 +120,8 @@ AI-driven-fall-detection/
 
 ### Hardware
 - **Raspberry Pi 4**: Central processing unit
-- **ESP8266 NodeMCU**: Sensor nodes
-- **Micro:bit v2**: Wearable device
-- **Sensors**: PIR, HC-SR04, DHT22
+- **ESP8266 NodeMCU**: Sensor nodes (2x recommended for multiple rooms)
+- **Sensors**: PIR (HC-SR501), HC-SR04 Ultrasonic, DHT22
 
 ### Software
 - **Backend**: Python 3.8+, FastAPI, SQLite3, Mosquitto MQTT
@@ -145,17 +139,18 @@ AI-driven-fall-detection/
 
 1. **Data Collection**
    - ESP8266 nodes read sensors every 2 seconds
-   - Micro:bit samples accelerometer at 50Hz
+   - PIR motion, ultrasonic distance, DHT22 temperature/humidity
    - Data published to MQTT topics
 
 2. **Data Processing**
    - Raspberry Pi receives MQTT messages
-   - Data stored in MongoDB
+   - Data stored in SQLite database
    - Real-time analysis for fall patterns
 
 3. **Fall Detection**
-   - Micro:bit detects potential fall
-   - Room sensors verify (PIR, ultrasonic, DHT22)
+   - Analyze room sensor patterns (PIR inactivity, ultrasonic proximity)
+   - Detect extended periods of no motion
+   - Verify with multiple sensor readings
    - AI model calculates severity score
    - Multi-sensor fusion confirms fall
 
@@ -176,9 +171,8 @@ See [INSTALLATION.md](INSTALLATION.md) for complete setup instructions.
 
 Quick start:
 1. Setup Raspberry Pi with SQLite and Mosquitto
-2. Upload ESP8266 sensor code
-3. Flash Micro:bit with wearable code
-4. Configure environment variables
+2. Upload ESP8266 sensor code to all nodes
+3. Configure environment variables
 5. Start backend API
 6. Launch web dashboard
 7. Install mobile app
