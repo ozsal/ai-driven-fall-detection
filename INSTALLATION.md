@@ -7,8 +7,8 @@ Complete installation guide for the AI-Driven Fall Detection System.
 1. [System Requirements](#system-requirements)
 2. [Raspberry Pi Setup](#raspberry-pi-setup)
 3. [ESP8266 Setup](#esp8266-setup)
-4. [Database Setup](#database-setup)
-5. [Web Dashboard Setup](#web-dashboard-setup)
+4. [Micro:bit Setup](#microbit-setup)
+5. [Database Setup](#database-setup)
 6. [Web Dashboard Setup](#web-dashboard-setup)
 7. [Mobile App Setup](#mobile-app-setup)
 8. [Configuration](#configuration)
@@ -19,6 +19,7 @@ Complete installation guide for the AI-Driven Fall Detection System.
 ### Hardware
 - Raspberry Pi 4 (4GB RAM recommended)
 - ESP8266 NodeMCU v1.0 (2x for multiple rooms)
+- Micro:bit v2
 - PIR Motion Sensor (HC-SR501) - 2x
 - Ultrasonic Distance Sensor (HC-SR04) - 2x
 - DHT22 Temperature/Humidity Sensor - 2x
@@ -141,6 +142,26 @@ Sketch → Include Library → Manage Libraries → Install:
 - Open Serial Monitor (115200 baud)
 - Verify WiFi connection
 - Check MQTT messages on broker
+
+## Micro:bit Setup
+
+### Option 1: MakeCode (Recommended)
+1. Go to https://makecode.microbit.org
+2. Click "New Project"
+3. Switch to Python mode
+4. Copy code from `microbit-wearable/fall_detection/main.py`
+5. Click "Download" → Flash to Micro:bit
+
+### Option 2: Mu Editor
+1. Install Mu Editor from https://codewith.mu/
+2. Connect Micro:bit via USB
+3. Open `main.py` from project
+4. Click "Flash" button
+
+### Testing
+- Press Button A to simulate fall
+- Press Button B to view accelerometer values
+- Watch for skull icon on fall detection
 
 ## Database Setup
 
@@ -274,7 +295,7 @@ curl http://localhost:8000/api/statistics
 
 ### 3. Test Sensors
 - ESP8266: Check serial monitor for readings
-- Test fall detection by simulating inactivity (cover PIR sensor, place object near ultrasonic)
+- Micro:bit: Press Button A to simulate fall
 - Verify data appears in dashboard
 
 ### 4. Test Alerts

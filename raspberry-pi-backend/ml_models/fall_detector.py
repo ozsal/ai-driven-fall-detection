@@ -3,14 +3,7 @@ Fall Detection AI/ML Model
 Implements multi-sensor fusion and fall severity scoring
 """
 
-try:
-    import numpy as np
-    HAS_NUMPY = True
-except ImportError:
-    HAS_NUMPY = False
-    # Fallback: use math for basic calculations
-    import math
-
+import numpy as np
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 import asyncio
@@ -21,11 +14,11 @@ class FallDetector:
     
     def __init__(self):
         self.model_loaded = False
-        # Updated weights for room-sensor-only detection (no wearable)
         self.weights = {
-            "room_verification": 0.5,  # Increased weight since no wearable
-            "duration": 0.3,
-            "environmental": 0.2
+            "accelerometer": 0.4,
+            "room_verification": 0.3,
+            "duration": 0.2,
+            "environmental": 0.1
         }
     
     async def load_model(self):
@@ -37,36 +30,42 @@ class FallDetector:
     
     async def detect_fall(
         self,
+        wearable_data: Dict,
         room_sensor_data: List[Dict]
     ) -> Dict:
         """
-        Detect fall using room sensors only (PIR, Ultrasonic, DHT22)
+        Detect fall using multi-sensor fusion
         
         Args:
-            room_sensor_data: Recent room sensor readings from ESP8266 nodes
+            wearable_data: Accelerometer data from Micro:bit
+            room_sensor_data: Recent room sensor readings
             
         Returns:
             Dictionary with fall_detected, severity_score, verified, location
         """
         
-        # Calculate room verification score (PIR + Ultrasonic)
+        # Extract accelerometer features
+        accel_score = self._calculate_accelerometer_score(wearable_data)
+        
+        # Calculate room verification score
         room_score = self._calculate_room_verification_score(room_sensor_data)
         
         # Calculate duration score (time since last movement)
         duration_score = self._calculate_duration_score(room_sensor_data)
         
-        # Calculate environmental score (temperature/humidity changes)
+        # Calculate environmental score
         env_score = self._calculate_environmental_score(room_sensor_data)
         
-        # Calculate overall severity score (no accelerometer component)
+        # Calculate overall severity score
         severity_score = (
+            accel_score * self.weights["accelerometer"] +
             room_score * self.weights["room_verification"] +
             duration_score * self.weights["duration"] +
             env_score * self.weights["environmental"]
         )
         
-        # Determine if fall is detected (lower threshold since no wearable confirmation)
-        fall_detected = severity_score >= 6.0  # Threshold adjusted for room-sensor-only
+        # Determine if fall is detected
+        fall_detected = severity_score >= 5.0  # Threshold
         
         # Verify with room sensors
         verified = self._verify_with_room_sensors(room_sensor_data)
@@ -80,13 +79,36 @@ class FallDetector:
             "verified": verified,
             "location": location,
             "component_scores": {
+                "accelerometer": accel_score,
                 "room_verification": room_score,
                 "duration": duration_score,
                 "environmental": env_score
             }
         }
     
-    # Removed _calculate_accelerometer_score - no longer needed without wearable device
+    def _calculate_accelerometer_score(self, wearable_data: Dict) -> float:
+        """Calculate score based on accelerometer data"""
+        # Extract acceleration magnitude
+        if "accel_magnitude" in wearable_data:
+            magnitude = wearable_data["accel_magnitude"]
+        elif "sensors" in wearable_data and "accelerometer" in wearable_data["sensors"]:
+            accel = wearable_data["sensors"]["accelerometer"]
+            magnitude = np.sqrt(
+                accel.get("x", 0)**2 +
+                accel.get("y", 0)**2 +
+                accel.get("z", 0)**2
+            )
+        else:
+            magnitude = 0
+        
+        # Normalize to 0-10 scale
+        # Impact threshold: 2500mg, max: 8000mg
+        if magnitude < 2500:
+            return 0.0
+        elif magnitude > 8000:
+            return 10.0
+        else:
+            return ((magnitude - 2500) / 5500) * 10
     
     def _calculate_room_verification_score(self, room_data: List[Dict]) -> float:
         """Calculate score based on room sensor verification"""

@@ -6,7 +6,6 @@ Handles MQTT broker connection and message processing
 import paho.mqtt.client as mqtt
 import json
 import asyncio
-import time
 from typing import Callable, Optional
 import os
 from dotenv import load_dotenv
@@ -20,27 +19,25 @@ class MQTTClient:
         self.client = None
         self.message_handler: Optional[Callable] = None
         self.connected = False
-        self.event_loop: Optional[asyncio.AbstractEventLoop] = None
         self.broker_host = os.getenv("MQTT_BROKER_HOST", "10.162.131.191")
         self.broker_port = int(os.getenv("MQTT_BROKER_PORT", 8883))
         self.username = os.getenv("MQTT_USERNAME", "ozsal")
         self.password = os.getenv("MQTT_PASSWORD", "@@Ozsal23##")
         self.client_id = "raspberry_pi_backend"
         
-        # Topics to subscribe (room sensors only)
+        # Topics to subscribe
         self.topics = [
             "sensors/pir/+",
             "sensors/ultrasonic/+",
             "sensors/dht22/+",
             "sensors/combined/+",
+            "wearable/fall/+",
+            "wearable/accelerometer/+",
             "devices/+/status"
         ]
     
     async def connect(self):
         """Connect to MQTT broker"""
-        # Store reference to the current event loop
-        self.event_loop = asyncio.get_event_loop()
-        
         self.client = mqtt.Client(client_id=self.client_id)
         self.client.username_pw_set(self.username, self.password)
         
@@ -84,23 +81,14 @@ class MQTTClient:
                 # If not JSON, create simple dict
                 payload = {"value": payload_str, "raw": payload_str}
             
-            # Add topic information (use time.time() instead of event loop time)
+            # Add topic information
             payload["topic"] = topic
-            payload["received_at"] = time.time()
+            payload["received_at"] = asyncio.get_event_loop().time()
             
             # Call message handler if set
-            if self.message_handler and self.event_loop:
-                # Schedule the coroutine in the main event loop
-                # This is thread-safe and works from MQTT callback thread
-                try:
-                    asyncio.run_coroutine_threadsafe(
-                        self.message_handler(topic, payload),
-                        self.event_loop
-                    )
-                except Exception as e:
-                    print(f"Error scheduling message handler: {e}")
-            elif self.message_handler:
-                print("Warning: Event loop not available, cannot process message")
+            if self.message_handler:
+                # Run handler in event loop
+                asyncio.create_task(self.message_handler(topic, payload))
             
         except Exception as e:
             print(f"Error processing MQTT message: {e}")

@@ -1,207 +1,175 @@
 """
-SQLite Database Connection and Models
-Replaces MongoDB with SQLite3 for simpler deployment
+SQLite Database Module
+Asynchronous SQLite operations for the Fall Detection System
 """
 
-import sqlite3
-import json
-import os
-from typing import Optional, List, Dict, Any
-from datetime import datetime, timedelta
-from contextlib import contextmanager
 import aiosqlite
-from dotenv import load_dotenv
+import json
+from typing import List, Dict, Optional, Any
+from datetime import datetime, timedelta
+import os
 
-load_dotenv()
+# Database file path
+DB_PATH = os.path.join(os.path.dirname(__file__), "..", "fall_detection.db")
 
-# Global database path
-_db_path: Optional[str] = None
-_db_initialized = False
-
-def get_db_path() -> str:
-    """Get database file path"""
-    global _db_path
-    if _db_path is None:
-        db_dir = os.getenv("DB_DIR", ".")
-        db_name = os.getenv("DB_NAME", "fall_detection.db")
-        _db_path = os.path.join(db_dir, db_name)
-    return _db_path
-
-async def get_database():
-    """Get database connection (async)"""
-    db_path = get_db_path()
-    return await aiosqlite.connect(db_path)
+def dict_factory(cursor, row):
+    """Convert database row to dictionary"""
+    return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
 
 async def init_database():
-    """Initialize SQLite database and create tables"""
-    global _db_initialized
-    
-    if _db_initialized:
-        return
-    
-    db_path = get_db_path()
-    
-    # Create directory if it doesn't exist
-    os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
-    
-    async with aiosqlite.connect(db_path) as db:
-        # Enable foreign keys
-        await db.execute("PRAGMA foreign_keys = ON")
+    """Initialize database and create tables if they don't exist"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = dict_factory
         
-        # Create sensor_readings table
+        # Sensor readings table
         await db.execute("""
             CREATE TABLE IF NOT EXISTS sensor_readings (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 device_id TEXT NOT NULL,
-                location TEXT,
-                sensor_type TEXT,
-                timestamp INTEGER,
-                received_at TEXT NOT NULL,
+                sensor_type TEXT NOT NULL,
+                timestamp INTEGER NOT NULL,
                 data TEXT NOT NULL,
-                topic TEXT
+                received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                location TEXT
             )
         """)
         
-        # Create fall_events table
+        # Fall events table
         await db.execute("""
             CREATE TABLE IF NOT EXISTS fall_events (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                event_id TEXT UNIQUE NOT NULL,
                 user_id TEXT NOT NULL,
-                timestamp TEXT NOT NULL,
+                timestamp TIMESTAMP NOT NULL,
                 severity_score REAL NOT NULL,
-                verified INTEGER NOT NULL DEFAULT 0,
-                location TEXT,
+                verified BOOLEAN DEFAULT 0,
                 sensor_data TEXT NOT NULL,
-                acknowledged INTEGER NOT NULL DEFAULT 0,
-                acknowledged_at TEXT
+                location TEXT,
+                acknowledged BOOLEAN DEFAULT 0,
+                acknowledged_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
         
-        # Create devices table
+        # Devices table
         await db.execute("""
             CREATE TABLE IF NOT EXISTS devices (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                device_id TEXT UNIQUE NOT NULL,
-                device_type TEXT,
+                device_id TEXT PRIMARY KEY,
+                device_type TEXT NOT NULL,
+                status TEXT DEFAULT 'active',
+                last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 location TEXT,
-                status TEXT NOT NULL DEFAULT 'offline',
-                last_seen TEXT NOT NULL
+                metadata TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
         
-        # Create users table
+        # Users table (for future use)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id TEXT UNIQUE NOT NULL,
+                user_id TEXT PRIMARY KEY,
                 name TEXT,
-                email TEXT UNIQUE,
+                email TEXT,
                 phone TEXT,
-                preferences TEXT,
-                created_at TEXT NOT NULL
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
         
-        # Create alert_logs table
+        # Alert logs table
         await db.execute("""
             CREATE TABLE IF NOT EXISTS alert_logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                event_id TEXT NOT NULL,
+                event_id INTEGER NOT NULL,
                 channels TEXT NOT NULL,
-                sent_at TEXT NOT NULL,
-                status TEXT NOT NULL
+                status TEXT NOT NULL,
+                sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (event_id) REFERENCES fall_events(id)
             )
         """)
         
-        # Create indexes
-        await db.execute("CREATE INDEX IF NOT EXISTS idx_sensor_device_id ON sensor_readings(device_id)")
+        # Create indexes for better performance
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_sensor_device ON sensor_readings(device_id)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_sensor_timestamp ON sensor_readings(timestamp)")
-        await db.execute("CREATE INDEX IF NOT EXISTS idx_sensor_received_at ON sensor_readings(received_at)")
-        await db.execute("CREATE INDEX IF NOT EXISTS idx_fall_user_id ON fall_events(user_id)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_fall_timestamp ON fall_events(timestamp)")
-        await db.execute("CREATE INDEX IF NOT EXISTS idx_fall_severity ON fall_events(severity_score)")
-        await db.execute("CREATE INDEX IF NOT EXISTS idx_devices_status ON devices(status)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_fall_user ON fall_events(user_id)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_devices_last_seen ON devices(last_seen)")
         
         await db.commit()
-    
-    _db_initialized = True
-    print(f"SQLite database initialized: {db_path}")
+        print(f"Database initialized at {DB_PATH}")
 
-# ==================== Helper Functions ====================
-
-def dict_factory(cursor, row):
-    """Convert SQLite row to dictionary"""
-    d = {}
-    for idx, col in enumerate(cursor.description):
-        d[col[0]] = row[idx]
-    return d
-
-async def insert_sensor_reading(data: Dict[str, Any]) -> int:
-    """Insert sensor reading"""
-    async with await get_database() as db:
+async def insert_sensor_reading(reading_data: Dict[str, Any]) -> int:
+    """Insert a sensor reading into the database"""
+    async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = dict_factory
+        
+        # Extract fields
+        device_id = reading_data.get("device_id", "unknown")
+        sensor_type = reading_data.get("sensor_type", "unknown")
+        timestamp = reading_data.get("timestamp", int(datetime.utcnow().timestamp()))
+        location = reading_data.get("location")
+        
+        # Store data as JSON string
+        data_json = json.dumps(reading_data.get("data", {}))
+        
         cursor = await db.execute("""
-            INSERT INTO sensor_readings 
-            (device_id, location, sensor_type, timestamp, received_at, data, topic)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (
-            data.get("device_id"),
-            data.get("location"),
-            data.get("sensor_type"),
-            data.get("timestamp"),
-            datetime.utcnow().isoformat(),
-            json.dumps(data.get("data", {})),
-            data.get("topic")
-        ))
+            INSERT INTO sensor_readings (device_id, sensor_type, timestamp, data, location)
+            VALUES (?, ?, ?, ?, ?)
+        """, (device_id, sensor_type, timestamp, data_json, location))
+        
         await db.commit()
+        
+        # Update or insert device
+        await db.execute("""
+            INSERT OR REPLACE INTO devices (device_id, device_type, last_seen, location)
+            VALUES (?, ?, CURRENT_TIMESTAMP, ?)
+        """, (device_id, sensor_type, location))
+        await db.commit()
+        
         return cursor.lastrowid
 
-async def insert_fall_event(event: Dict[str, Any]) -> str:
-    """Insert fall event and return event_id"""
-    import uuid
-    event_id = str(uuid.uuid4())
-    
-    async with await get_database() as db:
+async def insert_fall_event(event_data: Dict[str, Any]) -> int:
+    """Insert a fall event into the database"""
+    async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = dict_factory
-        await db.execute("""
-            INSERT INTO fall_events 
-            (event_id, user_id, timestamp, severity_score, verified, location, sensor_data)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (
-            event_id,
-            event.get("user_id"),
-            event.get("timestamp").isoformat() if isinstance(event.get("timestamp"), datetime) else event.get("timestamp"),
-            event.get("severity_score"),
-            1 if event.get("verified") else 0,
-            event.get("location"),
-            json.dumps(event.get("sensor_data", {}))
-        ))
+        
+        user_id = event_data.get("user_id", "unknown")
+        timestamp = event_data.get("timestamp", datetime.utcnow())
+        if isinstance(timestamp, datetime):
+            timestamp = timestamp.isoformat()
+        
+        severity_score = event_data.get("severity_score", 0.0)
+        verified = 1 if event_data.get("verified", False) else 0
+        location = event_data.get("location")
+        sensor_data_json = json.dumps(event_data.get("sensor_data", {}))
+        
+        cursor = await db.execute("""
+            INSERT INTO fall_events (user_id, timestamp, severity_score, verified, sensor_data, location)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (user_id, timestamp, severity_score, verified, sensor_data_json, location))
+        
         await db.commit()
-    
-    return event_id
+        return cursor.lastrowid
 
 async def get_sensor_readings(
     device_id: Optional[str] = None,
     sensor_type: Optional[str] = None,
     limit: int = 100
-) -> List[Dict]:
-    """Get sensor readings with filters"""
-    async with await get_database() as db:
+) -> List[Dict[str, Any]]:
+    """Get sensor readings with optional filters"""
+    async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = dict_factory
         
         query = "SELECT * FROM sensor_readings WHERE 1=1"
         params = []
         
         if device_id:
-            query += " AND device_id LIKE ?"
-            params.append(f"%{device_id}%")
+            query += " AND device_id = ?"
+            params.append(device_id)
         
         if sensor_type:
             query += " AND sensor_type = ?"
             params.append(sensor_type)
         
-        query += " ORDER BY received_at DESC LIMIT ?"
+        query += " ORDER BY timestamp DESC LIMIT ?"
         params.append(limit)
         
         cursor = await db.execute(query, params)
@@ -212,17 +180,18 @@ async def get_sensor_readings(
             if row.get("data"):
                 try:
                     row["data"] = json.loads(row["data"])
-                except:
-                    pass
+                except (json.JSONDecodeError, TypeError):
+                    row["data"] = {}
         
         return rows
 
 async def get_fall_events(
     user_id: Optional[str] = None,
-    limit: int = 50
-) -> List[Dict]:
-    """Get fall events"""
-    async with await get_database() as db:
+    limit: int = 50,
+    filters: Optional[Dict[str, Any]] = None
+) -> List[Dict[str, Any]]:
+    """Get fall events with optional filters"""
+    async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = dict_factory
         
         query = "SELECT * FROM fall_events WHERE 1=1"
@@ -232,166 +201,174 @@ async def get_fall_events(
             query += " AND user_id = ?"
             params.append(user_id)
         
+        if filters:
+            if "timestamp_gte" in filters:
+                query += " AND timestamp >= ?"
+                params.append(filters["timestamp_gte"].isoformat())
+            
+            if "acknowledged" in filters:
+                query += " AND acknowledged = ?"
+                params.append(1 if filters["acknowledged"] else 0)
+        
         query += " ORDER BY timestamp DESC LIMIT ?"
         params.append(limit)
         
         cursor = await db.execute(query, params)
         rows = await cursor.fetchall()
         
-        # Parse JSON and convert types
+        # Parse JSON sensor_data field
         for row in rows:
             if row.get("sensor_data"):
                 try:
                     row["sensor_data"] = json.loads(row["sensor_data"])
-                except:
-                    pass
+                except (json.JSONDecodeError, TypeError):
+                    row["sensor_data"] = {}
+            
+            # Convert boolean fields
             row["verified"] = bool(row.get("verified", 0))
             row["acknowledged"] = bool(row.get("acknowledged", 0))
-            # Convert timestamp string back to datetime format for API
-            if row.get("timestamp"):
-                row["timestamp"] = row["timestamp"]  # Keep as ISO string
         
         return rows
 
-async def get_fall_event(event_id: str) -> Optional[Dict]:
-    """Get specific fall event by event_id"""
-    async with await get_database() as db:
+async def get_fall_event(event_id: int) -> Optional[Dict[str, Any]]:
+    """Get a specific fall event by ID"""
+    async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = dict_factory
-        cursor = await db.execute(
-            "SELECT * FROM fall_events WHERE event_id = ?",
-            (event_id,)
-        )
+        
+        cursor = await db.execute("SELECT * FROM fall_events WHERE id = ?", (event_id,))
         row = await cursor.fetchone()
         
         if row:
-            # Parse JSON
+            # Parse JSON sensor_data field
             if row.get("sensor_data"):
                 try:
                     row["sensor_data"] = json.loads(row["sensor_data"])
-                except:
-                    pass
+                except (json.JSONDecodeError, TypeError):
+                    row["sensor_data"] = {}
+            
+            # Convert boolean fields
             row["verified"] = bool(row.get("verified", 0))
             row["acknowledged"] = bool(row.get("acknowledged", 0))
         
         return row
 
-async def acknowledge_fall_event(event_id: str) -> bool:
+async def acknowledge_fall_event(event_id: int) -> bool:
     """Acknowledge a fall event"""
-    async with await get_database() as db:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = dict_factory
+        
         cursor = await db.execute("""
             UPDATE fall_events 
-            SET acknowledged = 1, acknowledged_at = ?
-            WHERE event_id = ?
-        """, (datetime.utcnow().isoformat(), event_id))
+            SET acknowledged = 1, acknowledged_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (event_id,))
+        
         await db.commit()
         return cursor.rowcount > 0
 
-async def get_devices() -> List[Dict]:
+async def get_devices() -> List[Dict[str, Any]]:
     """Get all devices"""
-    async with await get_database() as db:
+    async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = dict_factory
+        
         cursor = await db.execute("SELECT * FROM devices ORDER BY last_seen DESC")
         rows = await cursor.fetchall()
+        
+        # Parse JSON metadata field
+        for row in rows:
+            if row.get("metadata"):
+                try:
+                    row["metadata"] = json.loads(row["metadata"])
+                except (json.JSONDecodeError, TypeError):
+                    row["metadata"] = {}
+        
         return rows
 
-async def get_recent_room_sensor_data(seconds: int = 30) -> List[Dict]:
-    """Get recent room sensor readings"""
-    cutoff_time = (datetime.utcnow() - timedelta(seconds=seconds)).isoformat()
-    
-    async with await get_database() as db:
+async def get_recent_room_sensor_data(minutes: int = 5, limit: int = 20) -> List[Dict[str, Any]]:
+    """Get recent room sensor data for ML analysis"""
+    async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = dict_factory
+        
+        cutoff_time = datetime.utcnow() - timedelta(minutes=minutes)
+        cutoff_timestamp = int(cutoff_time.timestamp())
+        
         cursor = await db.execute("""
-            SELECT * FROM sensor_readings 
-            WHERE device_id LIKE '%ESP8266%' 
-            AND received_at >= ?
-            ORDER BY received_at DESC 
-            LIMIT 10
-        """, (cutoff_time,))
+            SELECT * FROM sensor_readings
+            WHERE timestamp >= ? 
+            AND sensor_type IN ('room_sensor', 'esp8266', 'dht22', 'pir', 'ultrasonic')
+            ORDER BY timestamp DESC
+            LIMIT ?
+        """, (cutoff_timestamp, limit))
+        
         rows = await cursor.fetchall()
         
-        # Parse JSON data
+        # Parse JSON data field
         for row in rows:
             if row.get("data"):
                 try:
                     row["data"] = json.loads(row["data"])
-                except:
-                    pass
+                except (json.JSONDecodeError, TypeError):
+                    row["data"] = {}
         
         return rows
 
-async def count_fall_events(filters: Optional[Dict] = None) -> int:
+async def count_fall_events(filters: Optional[Dict[str, Any]] = None) -> int:
     """Count fall events with optional filters"""
-    async with await get_database() as db:
+    async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = dict_factory
+        
         query = "SELECT COUNT(*) as count FROM fall_events WHERE 1=1"
         params = []
         
         if filters:
             if "timestamp_gte" in filters:
-                timestamp_value = filters["timestamp_gte"]
-                if isinstance(timestamp_value, datetime):
-                    timestamp_str = timestamp_value.isoformat()
-                else:
-                    timestamp_str = str(timestamp_value)
                 query += " AND timestamp >= ?"
-                params.append(timestamp_str)
+                params.append(filters["timestamp_gte"].isoformat())
+            
+            if "acknowledged" in filters:
+                query += " AND acknowledged = ?"
+                params.append(1 if filters["acknowledged"] else 0)
         
         cursor = await db.execute(query, params)
         row = await cursor.fetchone()
-        # Handle both tuple and dict results
-        if isinstance(row, dict):
-            return row.get("count", 0)
-        elif isinstance(row, tuple):
-            return row[0] if row else 0
-        else:
-            return 0
+        return row[0] if row else 0
 
 async def count_sensor_readings() -> int:
     """Count total sensor readings"""
-    async with await get_database() as db:
+    async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = dict_factory
+        
         cursor = await db.execute("SELECT COUNT(*) as count FROM sensor_readings")
         row = await cursor.fetchone()
-        # Handle both tuple and dict results
-        if isinstance(row, dict):
-            return row.get("count", 0)
-        elif isinstance(row, tuple):
-            return row[0] if row else 0
-        else:
-            return 0
+        return row[0] if row else 0
 
 async def count_active_devices() -> int:
-    """Count active devices"""
-    async with await get_database() as db:
+    """Count active devices (seen in last 24 hours)"""
+    async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = dict_factory
-        cursor = await db.execute(
-            "SELECT COUNT(*) as count FROM devices WHERE status = 'online'"
-        )
+        
+        cutoff_time = datetime.utcnow() - timedelta(hours=24)
+        
+        cursor = await db.execute("""
+            SELECT COUNT(DISTINCT device_id) as count 
+            FROM devices 
+            WHERE last_seen >= ?
+        """, (cutoff_time.isoformat(),))
+        
         row = await cursor.fetchone()
-        # Handle both tuple and dict results
-        if isinstance(row, dict):
-            return row.get("count", 0)
-        elif isinstance(row, tuple):
-            return row[0] if row else 0
-        else:
-            return 0
+        return row[0] if row else 0
 
-async def insert_alert_log(event_id: str, channels: List[str], status: str = "sent"):
-    """Insert alert log"""
-    async with await get_database() as db:
+async def insert_alert_log(event_id: int, channels: List[str], status: str):
+    """Insert an alert log entry"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = dict_factory
+        
+        channels_json = json.dumps(channels)
+        
         await db.execute("""
-            INSERT INTO alert_logs (event_id, channels, sent_at, status)
-            VALUES (?, ?, ?, ?)
-        """, (
-            event_id,
-            json.dumps(channels),
-            datetime.utcnow().isoformat(),
-            status
-        ))
+            INSERT INTO alert_logs (event_id, channels, status)
+            VALUES (?, ?, ?)
+        """, (event_id, channels_json, status))
+        
         await db.commit()
-
-async def close_database():
-    """Close database connection"""
-    # SQLite connections are closed automatically when using context managers
-    print("SQLite database connection closed")
 

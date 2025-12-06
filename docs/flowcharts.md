@@ -11,6 +11,7 @@
 ┌─────────────────────────────┐
 │ Initialize All Components   │
 │ - ESP8266 Nodes             │
+│ - Micro:bit Wearable        │
 │ - Raspberry Pi Backend      │
 │ - Database                  │
 └────────┬────────────────────┘
@@ -37,71 +38,88 @@
 
 ```
 ┌─────────────────────────────────────────┐
-│  ESP8266 Sensor Data Collection        │
-│  - PIR Motion Sensor                    │
-│  - Ultrasonic Distance Sensor          │
-│  - DHT22 Temperature/Humidity           │
-│  (Every 2 seconds)                     │
+│  Micro:bit Accelerometer Reading        │
+│  (50Hz sampling rate)                   │
 └──────────────┬──────────────────────────┘
                │
                ▼
 ┌─────────────────────────────────────────┐
-│  Raspberry Pi Receives MQTT Data        │
-│  - Store in SQLite database            │
-│  - Analyze sensor patterns              │
+│  TinyML Model Inference                  │
+│  - Extract features (acceleration,      │
+│    jerk, orientation)                   │
+│  - Run inference                         │
 └──────────────┬──────────────────────────┘
                │
                ▼
-┌─────────────────────────────────────────┐
-│  Fall Detection Analysis                │
-│  - Check PIR: No motion detected?       │
-│  - Check Ultrasonic: Distance < 50cm?  │
-│  - Check DHT22: Environmental changes? │
-│  - Analyze duration of inactivity       │
-└──────────────┬──────────────────────────┘
+      ┌────────────────┐
+      │ Fall Detected? │
+      └───┬────────┬───┘
+          │        │
+         NO       YES
+          │        │
+          │        ▼
+          │  ┌─────────────────────────────┐
+          │  │ Publish to MQTT             │
+          │  │ Topic: wearable/fall/{id}   │
+          │  └──────────────┬──────────────┘
+          │                 │
+          │                 ▼
+          │  ┌─────────────────────────────┐
+          │  │ Raspberry Pi Receives Alert │
+          │  └──────────────┬──────────────┘
+          │                 │
+          │                 ▼
+          │  ┌─────────────────────────────┐
+          │  │ Room Verification Process   │
+          │  └──────────────┬──────────────┘
+          │                 │
+          │                 ▼
+          │  ┌─────────────────────────────┐
+          │  │ Check PIR Sensor            │
+          │  │ - Motion detected?          │
+          │  └──────────────┬──────────────┘
+          │                 │
+          │                 ▼
+          │  ┌─────────────────────────────┐
+          │  │ Check Ultrasonic Sensor      │
+          │  │ - Distance < threshold?      │
+          │  └──────────────┬──────────────┘
+          │                 │
+          │                 ▼
+          │  ┌─────────────────────────────┐
+          │  │ Check DHT22 Sensor          │
+          │  │ - Temp/Humidity change?     │
+          │  └──────────────┬──────────────┘
+          │                 │
+          │                 ▼
+          │  ┌─────────────────────────────┐
+          │  │ Calculate Severity Score    │
+          │  └──────────────┬──────────────┘
+          │                 │
+          │                 ▼
+          │  ┌─────────────────────────────┐
+          │  │ Score > Threshold?          │
+          │  └───┬──────────────────────┬───┘
+          │      │                     │
+          │     NO                    YES
+          │      │                     │
+          │      │                     ▼
+          │      │         ┌─────────────────────────┐
+          │      │         │ Trigger Alert System    │
+          │      │         │ - Push notification     │
+          │      │         │ - Email alert           │
+          │      │         │ - Dashboard update      │
+          │      │         │ - Log to database       │
+          │      │         └─────────────────────────┘
+          │      │
+          │      └─────────────────────┐
+          │                            │
+          └────────────────────────────┘
                │
                ▼
-      ┌─────────────────────────────┐
-      │ Calculate Severity Score    │
-      │ - Room Verification (50%)   │
-      │ - Duration (30%)             │
-      │ - Environmental (20%)       │
-      └──────────────┬──────────────┘
-                     │
-                     ▼
-          ┌──────────────────────┐
-          │ Score >= 6.0?         │
-          └───┬──────────────┬───┘
-              │              │
-             NO            YES
-              │              │
-              │              ▼
-              │  ┌─────────────────────────────┐
-              │  │ Verify with Multiple        │
-              │  │ Sensor Readings             │
-              │  │ - At least 2 factors match │
-              │  └──────────────┬──────────────┘
-              │                 │
-              │                 ▼
-              │  ┌─────────────────────────────┐
-              │  │ Fall Detected & Verified    │
-              │  └──────────────┬──────────────┘
-              │                 │
-              │                 ▼
-              │  ┌─────────────────────────────┐
-              │  │ Trigger Alert System        │
-              │  │ - Push notification         │
-              │  │ - Email alert                │
-              │  │ - Dashboard update           │
-              │  │ - Log to database            │
-              │  └─────────────────────────────┘
-              │
-              └─────────────────────┐
-                                    │
-                                    ▼
-                        ┌──────────────────────┐
-                        │ Continue Monitoring  │
-                        └──────────────────────┘
+      ┌──────────────────────┐
+      │ Continue Monitoring  │
+      └──────────────────────┘
 ```
 
 ## ESP8266 Sensor Node Flow
@@ -251,8 +269,8 @@
            │
            ▼
 ┌─────────────────────────────┐
-│ Store in SQLite Database    │
-│ Table: sensor_readings      │
+│ Store in MongoDB            │
+│ Collection: sensor_readings │
 └──────────┬──────────────────┘
            │
            ▼
@@ -263,11 +281,10 @@
            │
            ▼
 ┌─────────────────────────────┐
-│ Run Fall Detection Analysis │
-│ - PIR inactivity check      │
-│ - Ultrasonic distance check │
-│ - Duration analysis         │
-│ - Environmental changes     │
+│ Run Analysis                │
+│ - Pattern detection         │
+│ - Anomaly detection         │
+│ - Trend analysis            │
 └──────────┬──────────────────┘
            │
            ▼
@@ -282,63 +299,64 @@
 
 ```
 ┌─────────────────────────────────────┐
-│         SQLite Database              │
+│         MongoDB Collections          │
 ├─────────────────────────────────────┤
 │                                     │
 │  sensor_readings                    │
 │  {                                  │
-│    id: INTEGER PRIMARY KEY,          │
-│    device_id: TEXT,                  │
-│    location: TEXT,                   │
-│    sensor_type: TEXT,               │
-│    timestamp: INTEGER,              │
-│    received_at: TEXT (ISO),          │
-│    data: TEXT (JSON),               │
-│    topic: TEXT                      │
+│    _id: ObjectId,                   │
+│    device_id: string,               │
+│    sensor_type: string,             │
+│    timestamp: ISODate,              │
+│    data: {                          │
+│      motion: boolean,               │
+│      distance: number,              │
+│      temperature: number,           │
+│      humidity: number,              │
+│      acceleration: {x,y,z}          │
+│    }                                │
 │  }                                  │
 │                                     │
 │  fall_events                        │
 │  {                                  │
-│    id: INTEGER PRIMARY KEY,          │
-│    event_id: TEXT UNIQUE,           │
-│    user_id: TEXT,                   │
-│    timestamp: TEXT (ISO),            │
-│    severity_score: REAL,            │
-│    verified: INTEGER (0/1),         │
-│    location: TEXT,                   │
-│    sensor_data: TEXT (JSON),        │
-│    acknowledged: INTEGER (0/1),      │
-│    acknowledged_at: TEXT (ISO)      │
-│  }                                  │
-│                                     │
-│  devices                            │
-│  {                                  │
-│    id: INTEGER PRIMARY KEY,          │
-│    device_id: TEXT UNIQUE,          │
-│    device_type: TEXT,               │
-│    location: TEXT,                  │
-│    status: TEXT,                    │
-│    last_seen: TEXT (ISO)            │
+│    _id: ObjectId,                   │
+│    user_id: string,                 │
+│    timestamp: ISODate,              │
+│    severity_score: number,          │
+│    verified: boolean,               │
+│    sensor_data: {                   │
+│      accelerometer: {...},          │
+│      room_sensors: {...}            │
+│    },                               │
+│    alert_status: {                  │
+│      push_sent: boolean,            │
+│      email_sent: boolean,           │
+│      acknowledged: boolean          │
+│    }                                │
 │  }                                  │
 │                                     │
 │  users                              │
 │  {                                  │
-│    id: INTEGER PRIMARY KEY,          │
-│    user_id: TEXT UNIQUE,            │
-│    name: TEXT,                      │
-│    email: TEXT UNIQUE,              │
-│    phone: TEXT,                     │
-│    preferences: TEXT (JSON),        │
-│    created_at: TEXT (ISO)           │
+│    _id: ObjectId,                   │
+│    name: string,                    │
+│    email: string,                   │
+│    phone: string,                   │
+│    emergency_contacts: [...],       │
+│    preferences: {                   │
+│      alert_threshold: number,       │
+│      notification_enabled: boolean  │
+│    }                                │
 │  }                                  │
 │                                     │
-│  alert_logs                         │
+│  devices                            │
 │  {                                  │
-│    id: INTEGER PRIMARY KEY,          │
-│    event_id: TEXT,                  │
-│    channels: TEXT (JSON),           │
-│    sent_at: TEXT (ISO),             │
-│    status: TEXT                     │
+│    _id: ObjectId,                   │
+│    device_id: string,               │
+│    device_type: string,             │
+│    location: string,                │
+│    status: string,                  │
+│    last_seen: ISODate               │
 │  }                                  │
 └─────────────────────────────────────┘
 ```
+
