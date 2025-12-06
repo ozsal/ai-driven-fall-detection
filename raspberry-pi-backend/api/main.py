@@ -394,6 +394,83 @@ async def get_sensor_readings_endpoint(
             detail=f"Error fetching sensor readings: {str(e)}. Check server logs for details."
         )
 
+# ==================== Separate Sensor Endpoints ====================
+
+@app.get("/api/sensors/pir")
+async def get_pir_sensor_readings(
+    device_id: Optional[str] = None,
+    limit: int = 100
+):
+    """Get PIR motion sensor readings"""
+    try:
+        print(f"📊 API: Fetching PIR sensor readings - device_id={device_id}, limit={limit}")
+        readings = await db_get_sensor_readings(
+            device_id=device_id,
+            sensor_type="pir",
+            limit=limit
+        )
+        print(f"📊 API: Returning {len(readings)} PIR sensor readings")
+        return readings
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error fetching PIR sensor readings: {e}")
+        print(f"Traceback: {error_details}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Error fetching PIR sensor readings: {str(e)}. Check server logs for details."
+        )
+
+@app.get("/api/sensors/ultrasonic")
+async def get_ultrasonic_sensor_readings(
+    device_id: Optional[str] = None,
+    limit: int = 100
+):
+    """Get Ultrasonic distance sensor readings"""
+    try:
+        print(f"📊 API: Fetching Ultrasonic sensor readings - device_id={device_id}, limit={limit}")
+        readings = await db_get_sensor_readings(
+            device_id=device_id,
+            sensor_type="ultrasonic",
+            limit=limit
+        )
+        print(f"📊 API: Returning {len(readings)} Ultrasonic sensor readings")
+        return readings
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error fetching Ultrasonic sensor readings: {e}")
+        print(f"Traceback: {error_details}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Error fetching Ultrasonic sensor readings: {str(e)}. Check server logs for details."
+        )
+
+@app.get("/api/sensors/dht22")
+async def get_dht22_sensor_readings(
+    device_id: Optional[str] = None,
+    limit: int = 100
+):
+    """Get DHT22 temperature/humidity sensor readings"""
+    try:
+        print(f"📊 API: Fetching DHT22 sensor readings - device_id={device_id}, limit={limit}")
+        readings = await db_get_sensor_readings(
+            device_id=device_id,
+            sensor_type="dht22",
+            limit=limit
+        )
+        print(f"📊 API: Returning {len(readings)} DHT22 sensor readings")
+        return readings
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error fetching DHT22 sensor readings: {e}")
+        print(f"Traceback: {error_details}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Error fetching DHT22 sensor readings: {str(e)}. Check server logs for details."
+        )
+
 @app.get("/api/fall-events")
 async def get_fall_events(
     user_id: Optional[str] = None,
