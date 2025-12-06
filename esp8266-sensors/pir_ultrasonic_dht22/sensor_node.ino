@@ -294,20 +294,40 @@ void publish_sensor_data() {
   char json_buffer[512];
   serializeJson(doc, json_buffer);
   
-  // Publish to MQTT topics
+  // Publish to MQTT topics - each sensor separately
   String topic_pir = "sensors/pir/" + String(device_id);
   String topic_ultrasonic = "sensors/ultrasonic/" + String(device_id);
   String topic_dht22 = "sensors/dht22/" + String(device_id);
   String topic_combined = "sensors/combined/" + String(device_id);
   
-  // Publish individual sensor readings
+  // Publish PIR sensor data (motion detected: 1 or 0)
   client.publish(topic_pir.c_str(), pirState ? "1" : "0");
+  Serial.print("Published PIR: ");
+  Serial.println(pirState ? "1" : "0");
+  
+  // Publish Ultrasonic sensor data (distance in cm)
   client.publish(topic_ultrasonic.c_str(), String(distance).c_str());
+  Serial.print("Published Ultrasonic: ");
+  Serial.println(distance);
   
-  // Publish combined JSON data
+  // Publish DHT22 sensor data (temperature and humidity as JSON)
+  StaticJsonDocument<256> dht22_doc;
+  dht22_doc["device_id"] = device_id;
+  dht22_doc["temperature_c"] = temperature;
+  dht22_doc["humidity_percent"] = humidity;
+  dht22_doc["timestamp"] = millis();
+  char dht22_buffer[256];
+  serializeJson(dht22_doc, dht22_buffer);
+  client.publish(topic_dht22.c_str(), dht22_buffer);
+  Serial.print("Published DHT22: ");
+  Serial.println(dht22_buffer);
+  
+  // Publish combined JSON data (all sensors together)
   client.publish(topic_combined.c_str(), json_buffer);
+  Serial.print("Published Combined: ");
+  Serial.println(json_buffer);
   
-  Serial.println("Data published to MQTT");
+  Serial.println("All sensor data published to MQTT");
 }
 
 // ==================== LED Blink Helper ====================
