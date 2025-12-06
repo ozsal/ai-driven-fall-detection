@@ -72,14 +72,19 @@ class MQTTClient:
         """Callback when connected to broker"""
         if rc == 0:
             self.connected = True
-            print("MQTT client connected successfully")
+            print("✓ MQTT client connected successfully")
+            print(f"  Broker: {self.broker_host}:{self.broker_port}")
             
             # Subscribe to all topics
+            print("  Subscribing to topics:")
             for topic in self.topics:
-                client.subscribe(topic)
-                print(f"Subscribed to: {topic}")
+                result = client.subscribe(topic)
+                if result[0] == 0:
+                    print(f"    ✓ Subscribed to: {topic}")
+                else:
+                    print(f"    ✗ Failed to subscribe to: {topic} (code: {result[0]})")
         else:
-            print(f"MQTT connection failed with code {rc}")
+            print(f"✗ MQTT connection failed with code {rc}")
             self.connected = False
     
     def _on_message(self, client, userdata, msg):
@@ -87,6 +92,8 @@ class MQTTClient:
         try:
             topic = msg.topic
             payload_str = msg.payload.decode('utf-8')
+            print(f"📨 Received MQTT message on topic: {topic}")
+            print(f"   Payload: {payload_str[:100]}...")  # Print first 100 chars
             
             # Try to parse as JSON
             try:

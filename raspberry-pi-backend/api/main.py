@@ -199,7 +199,8 @@ async def handle_mqtt_message(topic: str, payload: dict):
         
         # Store sensor reading in database (real-time storage)
         reading_id = await insert_sensor_reading(db_reading)
-        print(f"✓ Stored sensor reading #{reading_id} from {device_id} ({sensor_type}) at {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"✓ Stored sensor reading #{reading_id} from {device_id} ({sensor_type}) on topic '{topic}' at {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"  Data: {sensor_data}")
         
         # Check for fall detection if from wearable (legacy support)
         if "wearable" in topic or "MICROBIT" in device_id.upper():
