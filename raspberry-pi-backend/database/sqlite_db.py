@@ -120,6 +120,36 @@ async def init_database():
         await db.execute("CREATE INDEX IF NOT EXISTS idx_sensors_last_seen ON sensors(last_seen)")
         
         await db.commit()
+        
+        # Migrate existing sensor readings to sensors table (if table is new)
+        try:
+            cursor = await db.execute("SELECT COUNT(*) as count FROM sensors")
+            sensor_count = (await cursor.fetchone())["count"]
+            
+            if sensor_count == 0:
+                # Table is new, populate from existing sensor_readings
+                print("Migrating existing sensor readings to sensors table...")
+                await db.execute("""
+                    INSERT INTO sensors (device_id, sensor_type, status, last_seen, location, total_readings)
+                    SELECT 
+                        device_id,
+                        sensor_type,
+                        CASE 
+                            WHEN MAX(received_at) >= datetime('now', '-5 minutes') THEN 'active'
+                            ELSE 'inactive'
+                        END as status,
+                        MAX(received_at) as last_seen,
+                        MAX(location) as location,
+                        COUNT(*) as total_readings
+                    FROM sensor_readings
+                    GROUP BY device_id, sensor_type
+                """)
+                await db.commit()
+                print("✓ Migration complete: Existing sensors added to sensors table")
+        except Exception as e:
+            print(f"⚠️ Migration note: {e}")
+            # Continue even if migration fails
+        
         print(f"Database initialized at {DB_PATH}")
 
 async def insert_sensor_reading(reading_data: Dict[str, Any]) -> int:
