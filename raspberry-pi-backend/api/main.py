@@ -185,12 +185,30 @@ async def handle_mqtt_message(topic: str, payload: dict):
                           "topic", "received_at", "receivedAt"}
         sensor_data = {k: v for k, v in payload.items() if k not in metadata_fields}
         
-        # If sensor_data is empty, use the entire payload as data
-        if not sensor_data:
-            sensor_data = payload.copy()
-            # Remove metadata from copy
-            for key in metadata_fields:
-                sensor_data.pop(key, None)
+        # If sensor_data is empty or only has "value"/"raw" (from primitive conversion),
+        # create proper sensor data structure
+        if not sensor_data or (len(sensor_data) <= 2 and "value" in payload):
+            # For primitive payloads (like "1" or "25.5"), use the value
+            if "value" in payload:
+                # Create sensor-specific data structure
+                if sensor_type == "pir":
+                    sensor_data = {"motion_detected": bool(payload.get("value") == "1" or payload.get("value") == 1)}
+                elif sensor_type == "ultrasonic":
+                    try:
+                        distance = float(payload.get("value", 0))
+                        sensor_data = {"distance_cm": distance}
+                    except:
+                        sensor_data = {"distance_cm": 0.0}
+                elif sensor_type == "dht22":
+                    # DHT22 should have JSON, but handle primitive case
+                    sensor_data = {"value": payload.get("value")}
+                else:
+                    sensor_data = {"value": payload.get("value")}
+            else:
+                # Use entire payload as data, removing metadata
+                sensor_data = payload.copy()
+                for key in metadata_fields:
+                    sensor_data.pop(key, None)
         
         # Prepare data for database insertion
         db_reading = {
