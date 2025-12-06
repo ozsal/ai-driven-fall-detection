@@ -122,15 +122,27 @@ class MQTTClient:
             # Call message handler if set
             if self.message_handler and self.event_loop:
                 try:
+                    print(f"🔄 Scheduling message handler for topic: {topic}")
                     # Use run_coroutine_threadsafe to safely schedule in the main event loop
-                    asyncio.run_coroutine_threadsafe(
+                    future = asyncio.run_coroutine_threadsafe(
                         self.message_handler(topic, payload),
                         self.event_loop
                     )
+                    # Wait a bit to see if there's an immediate exception
+                    try:
+                        future.result(timeout=1.0)
+                    except Exception as handler_error:
+                        print(f"❌ Message handler error: {handler_error}")
+                        import traceback
+                        traceback.print_exc()
                 except Exception as e:
-                    print(f"Error scheduling message handler: {e}")
+                    print(f"❌ Error scheduling message handler: {e}")
+                    import traceback
+                    traceback.print_exc()
             elif self.message_handler:
-                print("Warning: Event loop not available, cannot process message")
+                print("⚠️ Warning: Event loop not available, cannot process message")
+            else:
+                print("⚠️ Warning: No message handler set, message will not be processed")
             
         except Exception as e:
             print(f"Error processing MQTT message: {e}")
