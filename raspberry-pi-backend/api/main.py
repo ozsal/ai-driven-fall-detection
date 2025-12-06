@@ -238,6 +238,19 @@ async def handle_mqtt_message(topic: str, payload: dict):
             await process_fall_detection(payload)
         
         # Broadcast to WebSocket connections for real-time frontend updates
+        # Send separate message types for each sensor for easier frontend filtering
+        websocket_message = {
+            "type": f"sensor_{sensor_type}",  # e.g., "sensor_pir", "sensor_ultrasonic", "sensor_dht22"
+            "sensor_type": sensor_type,  # Keep for backward compatibility
+            "topic": topic,
+            "device_id": device_id,
+            "timestamp": timestamp,
+            "data": sensor_data,
+            "location": location
+        }
+        await broadcast_to_websockets(websocket_message)
+        
+        # Also send generic sensor_data message for backward compatibility
         await broadcast_to_websockets({
             "type": "sensor_data",
             "topic": topic,
