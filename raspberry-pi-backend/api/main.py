@@ -14,8 +14,8 @@ from contextlib import asynccontextmanager
 
 from database.sqlite_db import (
     init_database, insert_sensor_reading, insert_fall_event,
-    get_sensor_readings, get_fall_events, get_fall_event,
-    acknowledge_fall_event, get_devices, get_recent_room_sensor_data,
+    get_sensor_readings as db_get_sensor_readings, get_fall_events, get_fall_event,
+    acknowledge_fall_event, get_devices as db_get_devices, get_recent_room_sensor_data,
     count_fall_events, count_sensor_readings, count_active_devices
 )
 from mqtt_broker.mqtt_client import MQTTClient
@@ -68,22 +68,28 @@ async def lifespan(app: FastAPI):
     await init_database()
     print("Database initialized")
     
-    # Initialize MQTT client
+    # Initialize MQTT client (non-blocking - allow API to start even if MQTT fails)
     mqtt_client = MQTTClient()
-    await mqtt_client.connect()
-    print("MQTT client connected")
+    try:
+        await mqtt_client.connect(retry_on_failure=False)
+        if mqtt_client.is_connected():
+            print("✓ MQTT client connected")
+            # Start MQTT message processing
+            mqtt_client.set_message_handler(handle_mqtt_message)
+        else:
+            print("⚠️  MQTT client initialized but not connected. Will retry in background.")
+    except Exception as e:
+        print(f"⚠️  MQTT initialization failed: {e}")
+        print("⚠️  API will continue without MQTT. Start MQTT broker to enable sensor data reception.")
     
     # Initialize fall detector
     fall_detector = FallDetector()
     await fall_detector.load_model()
-    print("Fall detector model loaded")
+    print("✓ Fall detector model loaded")
     
     # Initialize alert manager
     alert_manager = AlertManager()
-    print("Alert manager initialized")
-    
-    # Start MQTT message processing
-    mqtt_client.set_message_handler(handle_mqtt_message)
+    print("✓ Alert manager initialized")
     
     yield
     
@@ -112,29 +118,89 @@ app.add_middleware(
 
 # ==================== MQTT Message Handler ====================
 async def handle_mqtt_message(topic: str, payload: dict):
-    """Process incoming MQTT messages"""
+    """Process incoming MQTT messages and store in database in real-time"""
     try:
-        # Store sensor reading in database
-        sensor_data = {
-            **payload,
-            "topic": topic,
-            "received_at": datetime.utcnow()
-        }
-        await insert_sensor_reading(sensor_data)
+        # Extract device_id from payload or topic
+        device_id = payload.get("device_id") or payload.get("deviceId") or "unknown"
         
-        # Check for fall detection if from wearable
-        if "wearable" in topic or "MICROBIT" in payload.get("device_id", ""):
+        # Parse topic parts for extracting information
+        topic_parts = topic.split("/")
+        
+        # Extract sensor_type from topic or payload
+        sensor_type = payload.get("sensor_type") or payload.get("sensorType")
+        if not sensor_type:
+            # Try to extract from topic (e.g., "sensors/dht22/ESP8266_001" -> "dht22")
+            if len(topic_parts) >= 2:
+                sensor_type = topic_parts[1]  # e.g., "dht22", "pir", "ultrasonic", "combined"
+            else:
+                sensor_type = "unknown"
+        
+        # Extract location from payload or topic
+        location = payload.get("location") or payload.get("Location")
+        if not location and len(topic_parts) >= 3:
+            location = topic_parts[2]  # Sometimes device_id is in topic
+        
+        # Extract timestamp from payload or use current time
+        timestamp = payload.get("timestamp") or payload.get("time") or payload.get("Timestamp")
+        if timestamp:
+            # Convert to int if it's a float or string
+            if isinstance(timestamp, float):
+                timestamp = int(timestamp)
+            elif isinstance(timestamp, str):
+                try:
+                    timestamp = int(float(timestamp))
+                except:
+                    timestamp = int(datetime.utcnow().timestamp())
+        else:
+            timestamp = int(datetime.utcnow().timestamp())
+        
+        # Extract actual sensor data (exclude metadata fields)
+        metadata_fields = {"device_id", "deviceId", "sensor_type", "sensorType", 
+                          "timestamp", "time", "Timestamp", "location", "Location", 
+                          "topic", "received_at", "receivedAt"}
+        sensor_data = {k: v for k, v in payload.items() if k not in metadata_fields}
+        
+        # If sensor_data is empty, use the entire payload as data
+        if not sensor_data:
+            sensor_data = payload.copy()
+            # Remove metadata from copy
+            for key in metadata_fields:
+                sensor_data.pop(key, None)
+        
+        # Prepare data for database insertion
+        db_reading = {
+            "device_id": device_id,
+            "sensor_type": sensor_type,
+            "timestamp": timestamp,
+            "data": sensor_data,  # This will be JSON stringified in insert_sensor_reading
+            "location": location,
+            "topic": topic
+        }
+        
+        # Store sensor reading in database (real-time storage)
+        reading_id = await insert_sensor_reading(db_reading)
+        print(f"✓ Stored sensor reading #{reading_id} from {device_id} ({sensor_type}) at {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}")
+        
+        # Check for fall detection if from wearable (legacy support)
+        if "wearable" in topic or "MICROBIT" in device_id.upper():
             await process_fall_detection(payload)
         
-        # Broadcast to WebSocket connections
+        # Broadcast to WebSocket connections for real-time frontend updates
         await broadcast_to_websockets({
             "type": "sensor_data",
             "topic": topic,
-            "data": payload
+            "device_id": device_id,
+            "sensor_type": sensor_type,
+            "timestamp": timestamp,
+            "data": sensor_data,
+            "location": location
         })
         
     except Exception as e:
-        print(f"Error handling MQTT message: {e}")
+        import traceback
+        print(f"❌ Error handling MQTT message from topic '{topic}': {e}")
+        print(f"Payload: {payload}")
+        traceback.print_exc()
 
 async def process_fall_detection(payload: dict):
     """Process potential fall detection"""
@@ -185,7 +251,8 @@ async def process_fall_detection(payload: dict):
 
 async def fetch_recent_room_sensor_data():
     """Get recent room sensor readings for verification"""
-    recent_readings = await get_recent_room_sensor_data(seconds=30)
+    # Convert 30 seconds to minutes (approximately 0.5 minutes)
+    recent_readings = await get_recent_room_sensor_data(minutes=1, limit=20)
     return recent_readings
 
 # ==================== WebSocket Manager ====================
@@ -224,24 +291,34 @@ async def health_check():
     }
 
 @app.get("/api/devices", response_model=List[DeviceStatus])
-async def get_devices():
+async def get_devices_endpoint():
     """Get all device statuses"""
-    devices = await get_devices()
+    devices = await db_get_devices()
     return devices
 
 @app.get("/api/sensor-readings")
-async def get_sensor_readings(
+async def get_sensor_readings_endpoint(
     device_id: Optional[str] = None,
     sensor_type: Optional[str] = None,
     limit: int = 100
 ):
     """Get sensor readings with optional filters"""
-    readings = await get_sensor_readings(
-        device_id=device_id,
-        sensor_type=sensor_type,
-        limit=limit
-    )
-    return readings
+    try:
+        readings = await db_get_sensor_readings(
+            device_id=device_id,
+            sensor_type=sensor_type,
+            limit=limit
+        )
+        return readings
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error fetching sensor readings: {e}")
+        print(f"Traceback: {error_details}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Error fetching sensor readings: {str(e)}. Check server logs for details."
+        )
 
 @app.get("/api/fall-events")
 async def get_fall_events(

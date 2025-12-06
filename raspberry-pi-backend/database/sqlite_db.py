@@ -30,9 +30,16 @@ async def init_database():
                 timestamp INTEGER NOT NULL,
                 data TEXT NOT NULL,
                 received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                location TEXT
+                location TEXT,
+                topic TEXT
             )
         """)
+        
+        # Add topic column if it doesn't exist (for existing databases)
+        try:
+            await db.execute("ALTER TABLE sensor_readings ADD COLUMN topic TEXT")
+        except Exception:
+            pass  # Column already exists
         
         # Fall events table
         await db.execute("""
@@ -106,14 +113,15 @@ async def insert_sensor_reading(reading_data: Dict[str, Any]) -> int:
         sensor_type = reading_data.get("sensor_type", "unknown")
         timestamp = reading_data.get("timestamp", int(datetime.utcnow().timestamp()))
         location = reading_data.get("location")
+        topic = reading_data.get("topic")
         
         # Store data as JSON string
         data_json = json.dumps(reading_data.get("data", {}))
         
         cursor = await db.execute("""
-            INSERT INTO sensor_readings (device_id, sensor_type, timestamp, data, location)
-            VALUES (?, ?, ?, ?, ?)
-        """, (device_id, sensor_type, timestamp, data_json, location))
+            INSERT INTO sensor_readings (device_id, sensor_type, timestamp, data, location, topic)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (device_id, sensor_type, timestamp, data_json, location, topic))
         
         await db.commit()
         
@@ -155,35 +163,73 @@ async def get_sensor_readings(
     limit: int = 100
 ) -> List[Dict[str, Any]]:
     """Get sensor readings with optional filters"""
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = dict_factory
+    try:
+        # Ensure database exists
+        if not os.path.exists(DB_PATH):
+            print(f"Warning: Database file not found at {DB_PATH}. Initializing...")
+            await init_database()
         
-        query = "SELECT * FROM sensor_readings WHERE 1=1"
-        params = []
-        
-        if device_id:
-            query += " AND device_id = ?"
-            params.append(device_id)
-        
-        if sensor_type:
-            query += " AND sensor_type = ?"
-            params.append(sensor_type)
-        
-        query += " ORDER BY timestamp DESC LIMIT ?"
-        params.append(limit)
-        
-        cursor = await db.execute(query, params)
-        rows = await cursor.fetchall()
-        
-        # Parse JSON data field
-        for row in rows:
-            if row.get("data"):
+        async with aiosqlite.connect(DB_PATH) as db:
+            db.row_factory = dict_factory
+            
+            query = "SELECT * FROM sensor_readings WHERE 1=1"
+            params = []
+            
+            if device_id:
+                query += " AND device_id = ?"
+                params.append(device_id)
+            
+            if sensor_type:
+                query += " AND sensor_type = ?"
+                params.append(sensor_type)
+            
+            # Order by id (most recent first) - simpler and more reliable
+            query += " ORDER BY id DESC LIMIT ?"
+            params.append(limit)
+            
+            try:
+                cursor = await db.execute(query, params)
+                rows = await cursor.fetchall()
+            except Exception as query_error:
+                print(f"Query error: {query_error}")
+                # Fallback: try without ordering
                 try:
-                    row["data"] = json.loads(row["data"])
-                except (json.JSONDecodeError, TypeError):
+                    fallback_query = "SELECT * FROM sensor_readings LIMIT ?"
+                    cursor = await db.execute(fallback_query, (limit,))
+                    rows = await cursor.fetchall()
+                except Exception as fallback_error:
+                    print(f"Fallback query also failed: {fallback_error}")
+                    # Return empty list if table doesn't exist or has issues
+                    return []
+            
+            # Parse JSON data field and ensure all fields are properly formatted
+            result = []
+            for row in rows:
+                # Convert row to dict if it's not already
+                if not isinstance(row, dict):
+                    row = dict(row)
+                
+                # Parse JSON data field
+                if row.get("data"):
+                    try:
+                        if isinstance(row["data"], str):
+                            row["data"] = json.loads(row["data"])
+                        elif not isinstance(row["data"], dict):
+                            row["data"] = {}
+                    except (json.JSONDecodeError, TypeError) as e:
+                        print(f"Warning: Failed to parse JSON data for reading {row.get('id')}: {e}")
+                        row["data"] = {}
+                else:
                     row["data"] = {}
-        
-        return rows
+                
+                result.append(row)
+            
+            return result
+    except Exception as e:
+        print(f"Error in get_sensor_readings: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
 
 async def get_fall_events(
     user_id: Optional[str] = None,
@@ -191,44 +237,61 @@ async def get_fall_events(
     filters: Optional[Dict[str, Any]] = None
 ) -> List[Dict[str, Any]]:
     """Get fall events with optional filters"""
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = dict_factory
+    try:
+        # Ensure database exists
+        if not os.path.exists(DB_PATH):
+            print(f"Warning: Database file not found at {DB_PATH}. Initializing...")
+            await init_database()
         
-        query = "SELECT * FROM fall_events WHERE 1=1"
-        params = []
-        
-        if user_id:
-            query += " AND user_id = ?"
-            params.append(user_id)
-        
-        if filters:
-            if "timestamp_gte" in filters:
-                query += " AND timestamp >= ?"
-                params.append(filters["timestamp_gte"].isoformat())
+        async with aiosqlite.connect(DB_PATH) as db:
+            db.row_factory = dict_factory
             
-            if "acknowledged" in filters:
-                query += " AND acknowledged = ?"
-                params.append(1 if filters["acknowledged"] else 0)
-        
-        query += " ORDER BY timestamp DESC LIMIT ?"
-        params.append(limit)
-        
-        cursor = await db.execute(query, params)
-        rows = await cursor.fetchall()
-        
-        # Parse JSON sensor_data field
-        for row in rows:
-            if row.get("sensor_data"):
-                try:
-                    row["sensor_data"] = json.loads(row["sensor_data"])
-                except (json.JSONDecodeError, TypeError):
-                    row["sensor_data"] = {}
+            query = "SELECT * FROM fall_events WHERE 1=1"
+            params = []
             
-            # Convert boolean fields
-            row["verified"] = bool(row.get("verified", 0))
-            row["acknowledged"] = bool(row.get("acknowledged", 0))
-        
-        return rows
+            if user_id:
+                query += " AND user_id = ?"
+                params.append(user_id)
+            
+            if filters:
+                if "timestamp_gte" in filters:
+                    query += " AND timestamp >= ?"
+                    params.append(filters["timestamp_gte"].isoformat())
+                
+                if "acknowledged" in filters:
+                    query += " AND acknowledged = ?"
+                    params.append(1 if filters["acknowledged"] else 0)
+            
+            query += " ORDER BY timestamp DESC LIMIT ?"
+            params.append(limit)
+            
+            try:
+                cursor = await db.execute(query, params)
+                rows = await cursor.fetchall()
+            except Exception as e:
+                print(f"Error querying fall_events table: {e}")
+                # Table might not exist, return empty list
+                return []
+            
+            # Parse JSON sensor_data field
+            for row in rows:
+                if row.get("sensor_data"):
+                    try:
+                        row["sensor_data"] = json.loads(row["sensor_data"])
+                    except (json.JSONDecodeError, TypeError):
+                        row["sensor_data"] = {}
+                
+                # Convert boolean fields
+                row["verified"] = bool(row.get("verified", 0))
+                row["acknowledged"] = bool(row.get("acknowledged", 0))
+            
+            return rows
+    except Exception as e:
+        print(f"Error in get_fall_events: {e}")
+        import traceback
+        traceback.print_exc()
+        # Return empty list instead of raising to prevent API errors
+        return []
 
 async def get_fall_event(event_id: int) -> Optional[Dict[str, Any]]:
     """Get a specific fall event by ID"""
@@ -268,21 +331,38 @@ async def acknowledge_fall_event(event_id: int) -> bool:
 
 async def get_devices() -> List[Dict[str, Any]]:
     """Get all devices"""
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = dict_factory
+    try:
+        # Ensure database exists
+        if not os.path.exists(DB_PATH):
+            print(f"Warning: Database file not found at {DB_PATH}. Initializing...")
+            await init_database()
         
-        cursor = await db.execute("SELECT * FROM devices ORDER BY last_seen DESC")
-        rows = await cursor.fetchall()
-        
-        # Parse JSON metadata field
-        for row in rows:
-            if row.get("metadata"):
-                try:
-                    row["metadata"] = json.loads(row["metadata"])
-                except (json.JSONDecodeError, TypeError):
-                    row["metadata"] = {}
-        
-        return rows
+        async with aiosqlite.connect(DB_PATH) as db:
+            db.row_factory = dict_factory
+            
+            try:
+                cursor = await db.execute("SELECT * FROM devices ORDER BY last_seen DESC")
+                rows = await cursor.fetchall()
+            except Exception as e:
+                print(f"Error querying devices table: {e}")
+                # Table might not exist, return empty list
+                return []
+            
+            # Parse JSON metadata field
+            for row in rows:
+                if row.get("metadata"):
+                    try:
+                        row["metadata"] = json.loads(row["metadata"])
+                    except (json.JSONDecodeError, TypeError):
+                        row["metadata"] = {}
+            
+            return rows
+    except Exception as e:
+        print(f"Error in get_devices: {e}")
+        import traceback
+        traceback.print_exc()
+        # Return empty list instead of raising to prevent API errors
+        return []
 
 async def get_recent_room_sensor_data(minutes: int = 5, limit: int = 20) -> List[Dict[str, Any]]:
     """Get recent room sensor data for ML analysis"""
@@ -314,49 +394,91 @@ async def get_recent_room_sensor_data(minutes: int = 5, limit: int = 20) -> List
 
 async def count_fall_events(filters: Optional[Dict[str, Any]] = None) -> int:
     """Count fall events with optional filters"""
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = dict_factory
+    try:
+        # Ensure database exists
+        if not os.path.exists(DB_PATH):
+            print(f"Warning: Database file not found at {DB_PATH}. Initializing...")
+            await init_database()
         
-        query = "SELECT COUNT(*) as count FROM fall_events WHERE 1=1"
-        params = []
-        
-        if filters:
-            if "timestamp_gte" in filters:
-                query += " AND timestamp >= ?"
-                params.append(filters["timestamp_gte"].isoformat())
+        async with aiosqlite.connect(DB_PATH) as db:
+            db.row_factory = dict_factory
             
-            if "acknowledged" in filters:
-                query += " AND acknowledged = ?"
-                params.append(1 if filters["acknowledged"] else 0)
-        
-        cursor = await db.execute(query, params)
-        row = await cursor.fetchone()
-        return row[0] if row else 0
+            query = "SELECT COUNT(*) as count FROM fall_events WHERE 1=1"
+            params = []
+            
+            if filters:
+                if "timestamp_gte" in filters:
+                    query += " AND timestamp >= ?"
+                    params.append(filters["timestamp_gte"].isoformat())
+                
+                if "acknowledged" in filters:
+                    query += " AND acknowledged = ?"
+                    params.append(1 if filters["acknowledged"] else 0)
+            
+            try:
+                cursor = await db.execute(query, params)
+                row = await cursor.fetchone()
+                return row["count"] if row else 0
+            except Exception as e:
+                print(f"Error counting fall_events: {e}")
+                # Table might not exist, return 0
+                return 0
+    except Exception as e:
+        print(f"Error in count_fall_events: {e}")
+        return 0
 
 async def count_sensor_readings() -> int:
     """Count total sensor readings"""
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = dict_factory
+    try:
+        # Ensure database exists
+        if not os.path.exists(DB_PATH):
+            print(f"Warning: Database file not found at {DB_PATH}. Initializing...")
+            await init_database()
         
-        cursor = await db.execute("SELECT COUNT(*) as count FROM sensor_readings")
-        row = await cursor.fetchone()
-        return row[0] if row else 0
+        async with aiosqlite.connect(DB_PATH) as db:
+            db.row_factory = dict_factory
+            
+            try:
+                cursor = await db.execute("SELECT COUNT(*) as count FROM sensor_readings")
+                row = await cursor.fetchone()
+                return row["count"] if row else 0
+            except Exception as e:
+                print(f"Error counting sensor_readings: {e}")
+                # Table might not exist, return 0
+                return 0
+    except Exception as e:
+        print(f"Error in count_sensor_readings: {e}")
+        return 0
 
 async def count_active_devices() -> int:
     """Count active devices (seen in last 24 hours)"""
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = dict_factory
+    try:
+        # Ensure database exists
+        if not os.path.exists(DB_PATH):
+            print(f"Warning: Database file not found at {DB_PATH}. Initializing...")
+            await init_database()
         
-        cutoff_time = datetime.utcnow() - timedelta(hours=24)
-        
-        cursor = await db.execute("""
-            SELECT COUNT(DISTINCT device_id) as count 
-            FROM devices 
-            WHERE last_seen >= ?
-        """, (cutoff_time.isoformat(),))
-        
-        row = await cursor.fetchone()
-        return row[0] if row else 0
+        async with aiosqlite.connect(DB_PATH) as db:
+            db.row_factory = dict_factory
+            
+            cutoff_time = datetime.utcnow() - timedelta(hours=24)
+            
+            try:
+                cursor = await db.execute("""
+                    SELECT COUNT(DISTINCT device_id) as count 
+                    FROM devices 
+                    WHERE last_seen >= ?
+                """, (cutoff_time.isoformat(),))
+                
+                row = await cursor.fetchone()
+                return row["count"] if row else 0
+            except Exception as e:
+                print(f"Error counting active devices: {e}")
+                # Table might not exist, return 0
+                return 0
+    except Exception as e:
+        print(f"Error in count_active_devices: {e}")
+        return 0
 
 async def insert_alert_log(event_id: int, channels: List[str], status: str):
     """Insert an alert log entry"""

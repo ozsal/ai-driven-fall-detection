@@ -6,6 +6,7 @@ Handles MQTT broker connection and message processing
 import paho.mqtt.client as mqtt
 import json
 import asyncio
+import time
 from typing import Callable, Optional
 import os
 from dotenv import load_dotenv
@@ -19,6 +20,7 @@ class MQTTClient:
         self.client = None
         self.message_handler: Optional[Callable] = None
         self.connected = False
+        self.event_loop: Optional[asyncio.AbstractEventLoop] = None
         self.broker_host = os.getenv("MQTT_BROKER_HOST", "10.162.131.191")
         self.broker_port = int(os.getenv("MQTT_BROKER_PORT", 8883))
         self.username = os.getenv("MQTT_USERNAME", "ozsal")
@@ -36,8 +38,15 @@ class MQTTClient:
             "devices/+/status"
         ]
     
-    async def connect(self):
-        """Connect to MQTT broker"""
+    async def connect(self, retry_on_failure: bool = True):
+        """Connect to MQTT broker
+        
+        Args:
+            retry_on_failure: If True, raises exception on failure. If False, logs warning and continues.
+        """
+        # Store event loop reference for use in callbacks
+        self.event_loop = asyncio.get_event_loop()
+        
         self.client = mqtt.Client(client_id=self.client_id)
         self.client.username_pw_set(self.username, self.password)
         
@@ -51,8 +60,13 @@ class MQTTClient:
             self.client.loop_start()
             print(f"MQTT client connecting to {self.broker_host}:{self.broker_port}")
         except Exception as e:
-            print(f"MQTT connection error: {e}")
-            raise
+            error_msg = f"MQTT connection error: {e}"
+            print(f"⚠️  {error_msg}")
+            print(f"⚠️  MQTT broker at {self.broker_host}:{self.broker_port} is not available")
+            print(f"⚠️  API will continue without MQTT. Sensor data will not be received until MQTT is available.")
+            if retry_on_failure:
+                raise
+            # Don't raise - allow API to continue without MQTT
     
     def _on_connect(self, client, userdata, flags, rc):
         """Callback when connected to broker"""
@@ -83,12 +97,20 @@ class MQTTClient:
             
             # Add topic information
             payload["topic"] = topic
-            payload["received_at"] = asyncio.get_event_loop().time()
+            payload["received_at"] = time.time()  # Use time.time() instead of event loop time
             
             # Call message handler if set
-            if self.message_handler:
-                # Run handler in event loop
-                asyncio.create_task(self.message_handler(topic, payload))
+            if self.message_handler and self.event_loop:
+                try:
+                    # Use run_coroutine_threadsafe to safely schedule in the main event loop
+                    asyncio.run_coroutine_threadsafe(
+                        self.message_handler(topic, payload),
+                        self.event_loop
+                    )
+                except Exception as e:
+                    print(f"Error scheduling message handler: {e}")
+            elif self.message_handler:
+                print("Warning: Event loop not available, cannot process message")
             
         except Exception as e:
             print(f"Error processing MQTT message: {e}")
@@ -104,7 +126,12 @@ class MQTTClient:
     
     def is_connected(self) -> bool:
         """Check if connected to broker"""
-        return self.connected and self.client.is_connected()
+        if not self.client:
+            return False
+        try:
+            return self.connected and self.client.is_connected()
+        except:
+            return False
     
     async def publish(self, topic: str, payload: dict):
         """Publish message to MQTT topic"""
