@@ -225,13 +225,17 @@ async def handle_mqtt_message(topic: str, payload: dict):
                     sensor_data.pop(key, None)
         
         # Prepare data for database insertion
+        # Include user information if available (can be added via API or from context)
         db_reading = {
-            "device_id": device_id,
+            "device_id": device_id,  # Keep for backward compatibility
             "sensor_type": sensor_type,
             "timestamp": timestamp,
             "data": sensor_data,  # This will be JSON stringified in insert_sensor_reading
             "location": location,
-            "topic": topic
+            "topic": topic,
+            "user_id": None,  # Can be set from authentication context
+            "user_role": "viewer",  # Default role
+            "user_permissions": ["read"]  # Default permissions
         }
         
         # Store sensor reading in database (real-time storage)

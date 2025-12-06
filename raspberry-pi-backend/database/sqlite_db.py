@@ -21,17 +21,23 @@ async def init_database():
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = dict_factory
         
-        # Sensor readings table
+        # Sensor readings table - stores readings from all sensors
         await db.execute("""
             CREATE TABLE IF NOT EXISTS sensor_readings (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                device_id TEXT NOT NULL,
+                device_id INTEGER NOT NULL,
+                device_name TEXT NOT NULL,
                 sensor_type TEXT NOT NULL,
+                reading_data TEXT NOT NULL,
+                status TEXT DEFAULT 'active',
+                user_id TEXT,
+                user_role TEXT,
+                user_permissions TEXT,
                 timestamp INTEGER NOT NULL,
-                data TEXT NOT NULL,
                 received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 location TEXT,
-                topic TEXT
+                topic TEXT,
+                FOREIGN KEY (device_id) REFERENCES devices(id)
             )
         """)
         
@@ -57,20 +63,37 @@ async def init_database():
             )
         """)
         
-        # Devices table
+        # Devices table - stores device names (PIR, Ultrasonic, Temperature & Humidity)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS devices (
-                device_id TEXT PRIMARY KEY,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                device_name TEXT NOT NULL UNIQUE,
                 device_type TEXT NOT NULL,
-                status TEXT DEFAULT 'active',
-                last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                status TEXT DEFAULT 'offline',
+                last_seen TIMESTAMP,
                 location TEXT,
-                metadata TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                description TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
         
-        # Sensors table - tracks each sensor separately with its own status
+        # Insert default devices if they don't exist
+        default_devices = [
+            ("PIR", "motion_sensor", "PIR Motion Sensor"),
+            ("Ultrasonic", "distance_sensor", "Ultrasonic Distance Sensor (HC-SR04)"),
+            ("Temperature & Humidity", "environmental_sensor", "DHT22 Temperature and Humidity Sensor")
+        ]
+        for device_name, device_type, description in default_devices:
+            try:
+                await db.execute("""
+                    INSERT OR IGNORE INTO devices (device_name, device_type, description, status)
+                    VALUES (?, ?, ?, 'offline')
+                """, (device_name, device_type, description))
+            except Exception:
+                pass  # Device already exists
+        
+        # Sensors table - tracks each sensor separately with its own status (for backward compatibility)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS sensors (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -313,6 +336,7 @@ async def insert_fall_event(event_data: Dict[str, Any]) -> int:
 async def get_sensor_readings(
     device_id: Optional[str] = None,
     sensor_type: Optional[str] = None,
+    device_name: Optional[str] = None,
     limit: int = 100
 ) -> List[Dict[str, Any]]:
     """Get sensor readings with optional filters"""
@@ -329,8 +353,19 @@ async def get_sensor_readings(
             params = []
             
             if device_id:
-                query += " AND device_id = ?"
-                params.append(device_id)
+                # Support both integer device_id and string device_id
+                try:
+                    device_id_int = int(device_id)
+                    query += " AND device_id = ?"
+                    params.append(device_id_int)
+                except ValueError:
+                    # If it's a string, try to find by device_name
+                    query += " AND device_name = ?"
+                    params.append(device_id)
+            
+            if device_name:
+                query += " AND device_name = ?"
+                params.append(device_name)
             
             if sensor_type:
                 query += " AND sensor_type = ?"
@@ -355,25 +390,36 @@ async def get_sensor_readings(
                     # Return empty list if table doesn't exist or has issues
                     return []
             
-            # Parse JSON data field and ensure all fields are properly formatted
+            # Parse JSON fields and ensure all fields are properly formatted
             result = []
             for row in rows:
                 # Convert row to dict if it's not already
                 if not isinstance(row, dict):
                     row = dict(row)
                 
-                # Parse JSON data field
-                if row.get("data"):
+                # Parse JSON reading_data field (renamed from 'data')
+                if row.get("reading_data"):
                     try:
-                        if isinstance(row["data"], str):
-                            row["data"] = json.loads(row["data"])
-                        elif not isinstance(row["data"], dict):
-                            row["data"] = {}
+                        if isinstance(row["reading_data"], str):
+                            row["reading_data"] = json.loads(row["reading_data"])
+                        elif not isinstance(row["reading_data"], dict):
+                            row["reading_data"] = {}
                     except (json.JSONDecodeError, TypeError) as e:
-                        print(f"Warning: Failed to parse JSON data for reading {row.get('id')}: {e}")
-                        row["data"] = {}
+                        print(f"Warning: Failed to parse JSON reading_data for reading {row.get('id')}: {e}")
+                        row["reading_data"] = {}
                 else:
-                    row["data"] = {}
+                    row["reading_data"] = {}
+                
+                # Also support 'data' field for backward compatibility
+                if "data" not in row and "reading_data" in row:
+                    row["data"] = row["reading_data"]
+                
+                # Parse user_permissions if it's a JSON string
+                if row.get("user_permissions") and isinstance(row["user_permissions"], str):
+                    try:
+                        row["user_permissions"] = json.loads(row["user_permissions"])
+                    except:
+                        pass
                 
                 result.append(row)
             
