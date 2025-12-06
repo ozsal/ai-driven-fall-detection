@@ -71,7 +71,13 @@ async def lifespan(app: FastAPI):
     # Initialize MQTT client (non-blocking - allow API to start even if MQTT fails)
     mqtt_client = MQTTClient()
     try:
-        await mqtt_client.connect(retry_on_failure=False)
+        # Try with retry_on_failure parameter (newer version)
+        try:
+            await mqtt_client.connect(retry_on_failure=False)
+        except TypeError:
+            # Fallback for older version without retry_on_failure parameter
+            await mqtt_client.connect()
+        
         if mqtt_client.is_connected():
             print("✓ MQTT client connected")
             # Start MQTT message processing
