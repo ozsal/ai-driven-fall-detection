@@ -23,8 +23,8 @@ class MQTTClient:
         self.event_loop: Optional[asyncio.AbstractEventLoop] = None
         self.broker_host = os.getenv("MQTT_BROKER_HOST", "10.162.131.191")
         self.broker_port = int(os.getenv("MQTT_BROKER_PORT", 8883))
-        self.username = os.getenv("MQTT_USERNAME", "ozsal")
-        self.password = os.getenv("MQTT_PASSWORD", "@@Ozsal23##")
+        self.username = os.getenv("MQTT_USERNAME", "")
+        self.password = os.getenv("MQTT_PASSWORD", "")
         self.client_id = "raspberry_pi_backend"
         
         # Topics to subscribe
@@ -48,7 +48,12 @@ class MQTTClient:
         self.event_loop = asyncio.get_event_loop()
         
         self.client = mqtt.Client(client_id=self.client_id)
-        self.client.username_pw_set(self.username, self.password)
+        # Only set username/password if provided (some brokers don't require auth)
+        if self.username and self.password:
+            self.client.username_pw_set(self.username, self.password)
+            print(f"  Using MQTT authentication: username={self.username}")
+        else:
+            print(f"  No MQTT authentication (anonymous connection)")
         
         # Set callbacks
         self.client.on_connect = self._on_connect
