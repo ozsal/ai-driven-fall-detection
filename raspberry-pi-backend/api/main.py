@@ -221,10 +221,17 @@ async def handle_mqtt_message(topic: str, payload: dict):
         }
         
         # Store sensor reading in database (real-time storage)
-        reading_id = await insert_sensor_reading(db_reading)
-        print(f"✓ Stored sensor reading #{reading_id} from {device_id} ({sensor_type}) on topic '{topic}' at {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}")
-        print(f"  Device ID: {device_id}, Sensor Type: {sensor_type}, Location: {location}")
-        print(f"  Data: {sensor_data}")
+        print(f"💾 Attempting to store reading: device_id={device_id}, sensor_type={sensor_type}, topic={topic}")
+        try:
+            reading_id = await insert_sensor_reading(db_reading)
+            print(f"✅ SUCCESS: Stored sensor reading #{reading_id} from {device_id} ({sensor_type}) on topic '{topic}' at {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}")
+            print(f"   Device ID: {device_id}, Sensor Type: {sensor_type}, Location: {location}")
+            print(f"   Data: {sensor_data}")
+        except Exception as db_error:
+            print(f"❌ DATABASE ERROR: Failed to store reading: {db_error}")
+            import traceback
+            traceback.print_exc()
+            raise  # Re-raise to be caught by outer exception handler
         
         # Check for fall detection if from wearable (legacy support)
         if "wearable" in topic or "MICROBIT" in device_id.upper():
@@ -243,9 +250,13 @@ async def handle_mqtt_message(topic: str, payload: dict):
         
     except Exception as e:
         import traceback
-        print(f"❌ Error handling MQTT message from topic '{topic}': {e}")
-        print(f"Payload: {payload}")
+        print(f"❌ CRITICAL ERROR handling MQTT message from topic '{topic}': {e}")
+        print(f"   Error type: {type(e).__name__}")
+        print(f"   Payload type: {type(payload)}")
+        print(f"   Payload: {payload}")
+        print(f"   Full traceback:")
         traceback.print_exc()
+        # Don't re-raise - we want to continue processing other messages
 
 async def process_fall_detection(payload: dict):
     """Process potential fall detection"""

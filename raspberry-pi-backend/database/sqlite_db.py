@@ -106,6 +106,16 @@ async def init_database():
 async def insert_sensor_reading(reading_data: Dict[str, Any]) -> int:
     """Insert a sensor reading into the database"""
     try:
+        # Ensure database directory exists
+        db_dir = os.path.dirname(DB_PATH)
+        if db_dir and not os.path.exists(db_dir):
+            os.makedirs(db_dir, exist_ok=True)
+        
+        # Ensure database file exists and is initialized
+        if not os.path.exists(DB_PATH):
+            print(f"⚠️ Database file not found at {DB_PATH}, initializing...")
+            await init_database()
+        
         async with aiosqlite.connect(DB_PATH) as db:
             db.row_factory = dict_factory
             
@@ -117,7 +127,13 @@ async def insert_sensor_reading(reading_data: Dict[str, Any]) -> int:
             topic = reading_data.get("topic")
             
             # Store data as JSON string
-            data_json = json.dumps(reading_data.get("data", {}))
+            try:
+                data_json = json.dumps(reading_data.get("data", {}))
+            except Exception as json_error:
+                print(f"⚠️ Error serializing data to JSON: {json_error}")
+                data_json = json.dumps({"error": "failed_to_serialize", "raw": str(reading_data.get("data", {}))})
+            
+            print(f"   📝 Inserting: device_id={device_id}, sensor_type={sensor_type}, timestamp={timestamp}")
             
             cursor = await db.execute("""
                 INSERT INTO sensor_readings (device_id, sensor_type, timestamp, data, location, topic)
@@ -126,17 +142,26 @@ async def insert_sensor_reading(reading_data: Dict[str, Any]) -> int:
             
             await db.commit()
             reading_id = cursor.lastrowid
+            print(f"   ✅ Inserted reading with ID: {reading_id}")
             
             # Update or insert device
-            await db.execute("""
-                INSERT OR REPLACE INTO devices (device_id, device_type, last_seen, location)
-                VALUES (?, ?, CURRENT_TIMESTAMP, ?)
-            """, (device_id, sensor_type, location))
-            await db.commit()
+            try:
+                await db.execute("""
+                    INSERT OR REPLACE INTO devices (device_id, device_type, last_seen, location)
+                    VALUES (?, ?, CURRENT_TIMESTAMP, ?)
+                """, (device_id, sensor_type, location))
+                await db.commit()
+                print(f"   ✅ Updated device: {device_id}")
+            except Exception as device_error:
+                print(f"   ⚠️ Warning: Failed to update device: {device_error}")
+                # Don't fail the whole operation if device update fails
             
             return reading_id
     except Exception as e:
-        print(f"❌ Error inserting sensor reading: {e}")
+        print(f"❌ CRITICAL: Error inserting sensor reading: {e}")
+        print(f"   Database path: {DB_PATH}")
+        print(f"   Database exists: {os.path.exists(DB_PATH)}")
+        print(f"   Reading data: {reading_data}")
         import traceback
         traceback.print_exc()
         raise
