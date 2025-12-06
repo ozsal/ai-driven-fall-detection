@@ -116,7 +116,9 @@ async def insert_sensor_reading(reading_data: Dict[str, Any]) -> int:
             print(f"⚠️ Database file not found at {DB_PATH}, initializing...")
             await init_database()
         
-        async with aiosqlite.connect(DB_PATH) as db:
+        # Use a persistent connection approach to ensure data is saved
+        db = await aiosqlite.connect(DB_PATH)
+        try:
             db.row_factory = dict_factory
             
             # Extract fields
@@ -134,7 +136,9 @@ async def insert_sensor_reading(reading_data: Dict[str, Any]) -> int:
                 data_json = json.dumps({"error": "failed_to_serialize", "raw": str(reading_data.get("data", {}))})
             
             print(f"   📝 Inserting: device_id={device_id}, sensor_type={sensor_type}, timestamp={timestamp}")
+            print(f"   📝 Data JSON length: {len(data_json)} bytes")
             
+            # Insert sensor reading
             cursor = await db.execute("""
                 INSERT INTO sensor_readings (device_id, sensor_type, timestamp, data, location, topic)
                 VALUES (?, ?, ?, ?, ?, ?)
@@ -143,6 +147,14 @@ async def insert_sensor_reading(reading_data: Dict[str, Any]) -> int:
             await db.commit()
             reading_id = cursor.lastrowid
             print(f"   ✅ Inserted reading with ID: {reading_id}")
+            
+            # Verify the insert worked
+            verify_cursor = await db.execute("SELECT COUNT(*) as count FROM sensor_readings WHERE id = ?", (reading_id,))
+            verify_row = await verify_cursor.fetchone()
+            if verify_row and verify_row["count"] > 0:
+                print(f"   ✅ Verified: Reading {reading_id} exists in database")
+            else:
+                print(f"   ❌ WARNING: Reading {reading_id} was inserted but not found in database!")
             
             # Update or insert device
             try:
@@ -157,6 +169,8 @@ async def insert_sensor_reading(reading_data: Dict[str, Any]) -> int:
                 # Don't fail the whole operation if device update fails
             
             return reading_id
+        finally:
+            await db.close()
     except Exception as e:
         print(f"❌ CRITICAL: Error inserting sensor reading: {e}")
         print(f"   Database path: {DB_PATH}")

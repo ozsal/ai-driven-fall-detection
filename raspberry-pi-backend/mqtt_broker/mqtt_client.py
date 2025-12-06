@@ -124,17 +124,22 @@ class MQTTClient:
                 try:
                     print(f"🔄 Scheduling message handler for topic: {topic}")
                     # Use run_coroutine_threadsafe to safely schedule in the main event loop
+                    # Don't wait for result here - let it run asynchronously
+                    # The handler will log its own success/failure
                     future = asyncio.run_coroutine_threadsafe(
                         self.message_handler(topic, payload),
                         self.event_loop
                     )
-                    # Wait a bit to see if there's an immediate exception
-                    try:
-                        future.result(timeout=1.0)
-                    except Exception as handler_error:
-                        print(f"❌ Message handler error: {handler_error}")
-                        import traceback
-                        traceback.print_exc()
+                    # Add a callback to log completion (optional, for debugging)
+                    def log_completion(fut):
+                        try:
+                            fut.result()  # This will raise if there was an exception
+                            print(f"✅ Message handler completed for topic: {topic}")
+                        except Exception as e:
+                            print(f"❌ Message handler failed for topic {topic}: {e}")
+                            import traceback
+                            traceback.print_exc()
+                    future.add_done_callback(log_completion)
                 except Exception as e:
                     print(f"❌ Error scheduling message handler: {e}")
                     import traceback

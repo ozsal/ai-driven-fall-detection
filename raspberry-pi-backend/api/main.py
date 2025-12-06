@@ -256,7 +256,8 @@ async def handle_mqtt_message(topic: str, payload: dict):
         print(f"   Payload: {payload}")
         print(f"   Full traceback:")
         traceback.print_exc()
-        # Don't re-raise - we want to continue processing other messages
+        # Re-raise to ensure it's logged, but don't stop the MQTT client
+        # The error will be caught by the future callback in mqtt_client
 
 async def process_fall_detection(payload: dict):
     """Process potential fall detection"""
