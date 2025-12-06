@@ -70,6 +70,21 @@ async def init_database():
             )
         """)
         
+        # Sensors table - tracks each sensor separately with its own status
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS sensors (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                device_id TEXT NOT NULL,
+                sensor_type TEXT NOT NULL,
+                status TEXT DEFAULT 'active',
+                last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                location TEXT,
+                total_readings INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(device_id, sensor_type)
+            )
+        """)
+        
         # Users table (for future use)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -96,9 +111,13 @@ async def init_database():
         # Create indexes for better performance
         await db.execute("CREATE INDEX IF NOT EXISTS idx_sensor_device ON sensor_readings(device_id)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_sensor_timestamp ON sensor_readings(timestamp)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_sensor_type ON sensor_readings(sensor_type)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_fall_timestamp ON fall_events(timestamp)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_fall_user ON fall_events(user_id)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_devices_last_seen ON devices(last_seen)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_sensors_device_type ON sensors(device_id, sensor_type)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_sensors_status ON sensors(status)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_sensors_last_seen ON sensors(last_seen)")
         
         await db.commit()
         print(f"Database initialized at {DB_PATH}")
@@ -167,6 +186,40 @@ async def insert_sensor_reading(reading_data: Dict[str, Any]) -> int:
             except Exception as device_error:
                 print(f"   ⚠️ Warning: Failed to update device: {device_error}")
                 # Don't fail the whole operation if device update fails
+            
+            # Update or insert sensor with its own status
+            try:
+                # Check if sensor exists
+                check_cursor = await db.execute("""
+                    SELECT id, total_readings FROM sensors 
+                    WHERE device_id = ? AND sensor_type = ?
+                """, (device_id, sensor_type))
+                sensor_row = await check_cursor.fetchone()
+                
+                if sensor_row:
+                    # Update existing sensor
+                    new_total = (sensor_row["total_readings"] or 0) + 1
+                    await db.execute("""
+                        UPDATE sensors 
+                        SET status = 'active', 
+                            last_seen = CURRENT_TIMESTAMP,
+                            total_readings = ?,
+                            location = ?
+                        WHERE device_id = ? AND sensor_type = ?
+                    """, (new_total, location, device_id, sensor_type))
+                    print(f"   ✅ Updated sensor: {device_id}/{sensor_type} (total readings: {new_total})")
+                else:
+                    # Insert new sensor
+                    await db.execute("""
+                        INSERT INTO sensors (device_id, sensor_type, status, last_seen, location, total_readings)
+                        VALUES (?, ?, 'active', CURRENT_TIMESTAMP, ?, 1)
+                    """, (device_id, sensor_type, location))
+                    print(f"   ✅ Created new sensor: {device_id}/{sensor_type}")
+                
+                await db.commit()
+            except Exception as sensor_error:
+                print(f"   ⚠️ Warning: Failed to update sensor: {sensor_error}")
+                # Don't fail the whole operation if sensor update fails
             
             return reading_id
         finally:

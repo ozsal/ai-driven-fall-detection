@@ -16,7 +16,8 @@ from database.sqlite_db import (
     init_database, insert_sensor_reading, insert_fall_event,
     get_sensor_readings as db_get_sensor_readings, get_fall_events, get_fall_event,
     acknowledge_fall_event, get_devices as db_get_devices, get_recent_room_sensor_data,
-    count_fall_events, count_sensor_readings, count_active_devices
+    count_fall_events, count_sensor_readings, count_active_devices,
+    get_sensors as db_get_sensors, update_sensor_status
 )
 from mqtt_broker.mqtt_client import MQTTClient
 from ml_models.fall_detector import FallDetector
@@ -365,6 +366,57 @@ async def get_devices_endpoint():
     """Get all device statuses"""
     devices = await db_get_devices()
     return devices
+
+@app.get("/api/sensors")
+async def get_sensors_endpoint(
+    sensor_type: Optional[str] = None,
+    device_id: Optional[str] = None
+):
+    """Get all sensors with their active status
+    
+    Query Parameters:
+    - sensor_type: Filter by sensor type (pir, ultrasonic, dht22)
+    - device_id: Filter by device ID
+    """
+    sensors = await db_get_sensors(sensor_type=sensor_type, device_id=device_id)
+    return sensors
+
+@app.get("/api/sensors/pir/status")
+async def get_pir_sensors_status():
+    """Get all PIR sensors with their status"""
+    sensors = await db_get_sensors(sensor_type="pir")
+    return sensors
+
+@app.get("/api/sensors/ultrasonic/status")
+async def get_ultrasonic_sensors_status():
+    """Get all Ultrasonic sensors with their status"""
+    sensors = await db_get_sensors(sensor_type="ultrasonic")
+    return sensors
+
+@app.get("/api/sensors/dht22/status")
+async def get_dht22_sensors_status():
+    """Get all DHT22 sensors with their status"""
+    sensors = await db_get_sensors(sensor_type="dht22")
+    return sensors
+
+@app.put("/api/sensors/{device_id}/{sensor_type}/status")
+async def update_sensor_status_endpoint(
+    device_id: str,
+    sensor_type: str,
+    status: str
+):
+    """Update sensor status manually
+    
+    Status values: 'active' or 'inactive'
+    """
+    if status not in ["active", "inactive"]:
+        raise HTTPException(status_code=400, detail="Status must be 'active' or 'inactive'")
+    
+    result = await update_sensor_status(device_id, sensor_type, status)
+    if result:
+        return {"message": "Sensor status updated", "device_id": device_id, "sensor_type": sensor_type, "status": status}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to update sensor status")
 
 @app.get("/api/sensor-readings")
 async def get_sensor_readings_endpoint(
