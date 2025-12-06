@@ -126,6 +126,20 @@ app.add_middleware(
 async def handle_mqtt_message(topic: str, payload: dict):
     """Process incoming MQTT messages and store in database in real-time"""
     try:
+        # Ensure payload is a dictionary
+        # If payload is a primitive type (int, float, str), convert it to a dict
+        if not isinstance(payload, dict):
+            if isinstance(payload, (int, float)):
+                payload = {"value": payload, "raw": payload}
+            elif isinstance(payload, str):
+                payload = {"value": payload, "raw": payload}
+            else:
+                # Try to convert to dict if possible
+                try:
+                    payload = dict(payload)
+                except:
+                    payload = {"value": str(payload), "raw": payload}
+        
         # Extract device_id from payload or topic
         device_id = payload.get("device_id") or payload.get("deviceId") or "unknown"
         
