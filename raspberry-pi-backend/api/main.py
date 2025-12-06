@@ -349,16 +349,20 @@ async def get_sensor_readings_endpoint(
 ):
     """Get sensor readings with optional filters"""
     try:
+        print(f"📊 API: Fetching sensor readings - device_id={device_id}, sensor_type={sensor_type}, limit={limit}")
         readings = await db_get_sensor_readings(
             device_id=device_id,
             sensor_type=sensor_type,
             limit=limit
         )
+        print(f"📊 API: Returning {len(readings)} sensor readings")
+        if len(readings) == 0:
+            print(f"⚠️  API: No sensor readings found in database. Check if MQTT messages are being stored.")
         return readings
     except Exception as e:
         import traceback
         error_details = traceback.format_exc()
-        print(f"Error fetching sensor readings: {e}")
+        print(f"❌ Error fetching sensor readings: {e}")
         print(f"Traceback: {error_details}")
         raise HTTPException(
             status_code=500, 
@@ -418,12 +422,39 @@ async def get_statistics():
     total_readings = await count_sensor_readings()
     active_devices = await count_active_devices()
     
+    print(f"📊 Statistics: total_readings={total_readings}, active_devices={active_devices}")
+    
     return {
         "total_fall_events": total_events,
         "recent_events_7d": recent_events,
         "total_sensor_readings": total_readings,
         "active_devices": active_devices
     }
+
+@app.get("/api/debug/database")
+async def debug_database():
+    """Debug endpoint to check database status"""
+    import os
+    from database.sqlite_db import DB_PATH
+    
+    result = {
+        "database_path": DB_PATH,
+        "database_exists": os.path.exists(DB_PATH),
+        "database_size": os.path.getsize(DB_PATH) if os.path.exists(DB_PATH) else 0,
+        "total_readings": await count_sensor_readings(),
+        "total_devices": len(await db_get_devices()),
+        "mqtt_connected": mqtt_client.is_connected() if mqtt_client else False,
+    }
+    
+    # Get sample readings
+    sample_readings = await db_get_sensor_readings(limit=5)
+    result["sample_readings"] = sample_readings
+    
+    # Get devices
+    devices = await db_get_devices()
+    result["devices"] = devices
+    
+    return result
 
 # ==================== Run Server ====================
 if __name__ == "__main__":

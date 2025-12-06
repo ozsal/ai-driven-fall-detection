@@ -105,34 +105,41 @@ async def init_database():
 
 async def insert_sensor_reading(reading_data: Dict[str, Any]) -> int:
     """Insert a sensor reading into the database"""
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = dict_factory
-        
-        # Extract fields
-        device_id = reading_data.get("device_id", "unknown")
-        sensor_type = reading_data.get("sensor_type", "unknown")
-        timestamp = reading_data.get("timestamp", int(datetime.utcnow().timestamp()))
-        location = reading_data.get("location")
-        topic = reading_data.get("topic")
-        
-        # Store data as JSON string
-        data_json = json.dumps(reading_data.get("data", {}))
-        
-        cursor = await db.execute("""
-            INSERT INTO sensor_readings (device_id, sensor_type, timestamp, data, location, topic)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (device_id, sensor_type, timestamp, data_json, location, topic))
-        
-        await db.commit()
-        
-        # Update or insert device
-        await db.execute("""
-            INSERT OR REPLACE INTO devices (device_id, device_type, last_seen, location)
-            VALUES (?, ?, CURRENT_TIMESTAMP, ?)
-        """, (device_id, sensor_type, location))
-        await db.commit()
-        
-        return cursor.lastrowid
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            db.row_factory = dict_factory
+            
+            # Extract fields
+            device_id = reading_data.get("device_id", "unknown")
+            sensor_type = reading_data.get("sensor_type", "unknown")
+            timestamp = reading_data.get("timestamp", int(datetime.utcnow().timestamp()))
+            location = reading_data.get("location")
+            topic = reading_data.get("topic")
+            
+            # Store data as JSON string
+            data_json = json.dumps(reading_data.get("data", {}))
+            
+            cursor = await db.execute("""
+                INSERT INTO sensor_readings (device_id, sensor_type, timestamp, data, location, topic)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (device_id, sensor_type, timestamp, data_json, location, topic))
+            
+            await db.commit()
+            reading_id = cursor.lastrowid
+            
+            # Update or insert device
+            await db.execute("""
+                INSERT OR REPLACE INTO devices (device_id, device_type, last_seen, location)
+                VALUES (?, ?, CURRENT_TIMESTAMP, ?)
+            """, (device_id, sensor_type, location))
+            await db.commit()
+            
+            return reading_id
+    except Exception as e:
+        print(f"❌ Error inserting sensor reading: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
 
 async def insert_fall_event(event_data: Dict[str, Any]) -> int:
     """Insert a fall event into the database"""
