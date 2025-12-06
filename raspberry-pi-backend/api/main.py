@@ -140,11 +140,17 @@ async def handle_mqtt_message(topic: str, payload: dict):
                 except:
                     payload = {"value": str(payload), "raw": payload}
         
-        # Extract device_id from payload or topic
-        device_id = payload.get("device_id") or payload.get("deviceId") or "unknown"
-        
         # Parse topic parts for extracting information
         topic_parts = topic.split("/")
+        
+        # Extract device_id from payload or topic
+        # Topic format: sensors/pir/ESP8266_NODE_01 -> device_id is in topic_parts[2]
+        device_id = payload.get("device_id") or payload.get("deviceId")
+        if not device_id and len(topic_parts) >= 3:
+            # Extract from topic (e.g., "sensors/pir/ESP8266_NODE_01" -> "ESP8266_NODE_01")
+            device_id = topic_parts[2]
+        if not device_id:
+            device_id = "unknown"
         
         # Extract sensor_type from topic or payload
         sensor_type = payload.get("sensor_type") or payload.get("sensorType")
@@ -157,8 +163,7 @@ async def handle_mqtt_message(topic: str, payload: dict):
         
         # Extract location from payload or topic
         location = payload.get("location") or payload.get("Location")
-        if not location and len(topic_parts) >= 3:
-            location = topic_parts[2]  # Sometimes device_id is in topic
+        # Don't use topic_parts[2] for location since that's device_id
         
         # Extract timestamp from payload or use current time
         timestamp = payload.get("timestamp") or payload.get("time") or payload.get("Timestamp")
@@ -200,6 +205,7 @@ async def handle_mqtt_message(topic: str, payload: dict):
         # Store sensor reading in database (real-time storage)
         reading_id = await insert_sensor_reading(db_reading)
         print(f"✓ Stored sensor reading #{reading_id} from {device_id} ({sensor_type}) on topic '{topic}' at {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"  Device ID: {device_id}, Sensor Type: {sensor_type}, Location: {location}")
         print(f"  Data: {sensor_data}")
         
         # Check for fall detection if from wearable (legacy support)
