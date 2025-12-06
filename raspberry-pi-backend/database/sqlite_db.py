@@ -205,14 +205,38 @@ async def insert_sensor_reading(reading_data: Dict[str, Any]) -> int:
             else:
                 print(f"   ❌ WARNING: Reading {reading_id} was inserted but not found in database!")
             
-            # Update or insert device
+            # Update or insert device (device_type should be the device model, not sensor type)
+            # Determine device type from device_id or use default
+            device_type = "esp8266"  # Default for ESP8266 nodes
+            if "ESP8266" in device_id.upper() or "NODE" in device_id.upper():
+                device_type = "esp8266"
+            elif "RASPBERRY" in device_id.upper() or "PI" in device_id.upper():
+                device_type = "raspberry_pi"
+            else:
+                device_type = "sensor_node"  # Generic fallback
+            
             try:
-                await db.execute("""
-                    INSERT OR REPLACE INTO devices (device_id, device_type, last_seen, location)
-                    VALUES (?, ?, CURRENT_TIMESTAMP, ?)
-                """, (device_id, sensor_type, location))
+                # Check if device exists
+                check_cursor = await db.execute("SELECT device_id FROM devices WHERE device_id = ?", (device_id,))
+                device_exists = await check_cursor.fetchone()
+                
+                if device_exists:
+                    # Update existing device (don't overwrite device_type)
+                    await db.execute("""
+                        UPDATE devices 
+                        SET last_seen = CURRENT_TIMESTAMP,
+                            location = COALESCE(?, location)
+                        WHERE device_id = ?
+                    """, (location, device_id))
+                else:
+                    # Insert new device
+                    await db.execute("""
+                        INSERT INTO devices (device_id, device_type, last_seen, location)
+                        VALUES (?, ?, CURRENT_TIMESTAMP, ?)
+                    """, (device_id, device_type, location))
+                
                 await db.commit()
-                print(f"   ✅ Updated device: {device_id}")
+                print(f"   ✅ Updated device: {device_id} (type: {device_type})")
             except Exception as device_error:
                 print(f"   ⚠️ Warning: Failed to update device: {device_error}")
                 # Don't fail the whole operation if device update fails

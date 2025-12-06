@@ -154,6 +154,7 @@ async def handle_mqtt_message(topic: str, payload: dict):
             device_id = "unknown"
         
         # Extract sensor_type from topic or payload
+        # Priority: payload > topic extraction
         sensor_type = payload.get("sensor_type") or payload.get("sensorType")
         if not sensor_type:
             # Try to extract from topic (e.g., "sensors/dht22/ESP8266_001" -> "dht22")
@@ -161,6 +162,18 @@ async def handle_mqtt_message(topic: str, payload: dict):
                 sensor_type = topic_parts[1]  # e.g., "dht22", "pir", "ultrasonic", "combined"
             else:
                 sensor_type = "unknown"
+        
+        # Normalize sensor type names
+        sensor_type_lower = sensor_type.lower()
+        if sensor_type_lower in ["pir", "motion", "motion_sensor"]:
+            sensor_type = "pir"
+        elif sensor_type_lower in ["ultrasonic", "ultrasonic_sensor", "sr04", "hc-sr04", "distance"]:
+            sensor_type = "ultrasonic"
+        elif sensor_type_lower in ["dht22", "dht", "temperature", "humidity", "temp_hum"]:
+            sensor_type = "dht22"
+        elif sensor_type_lower == "combined":
+            sensor_type = "combined"
+        # Keep other sensor types as-is (e.g., "room_sensor", etc.)
         
         # Extract location from payload or topic
         location = payload.get("location") or payload.get("Location")
