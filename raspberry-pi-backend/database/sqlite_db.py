@@ -528,7 +528,7 @@ async def get_recent_room_sensor_data(minutes: int = 5, limit: int = 20) -> List
         cursor = await db.execute("""
             SELECT * FROM sensor_readings
             WHERE timestamp >= ? 
-            AND sensor_type IN ('room_sensor', 'esp8266', 'dht22', 'pir', 'ultrasonic')
+            AND sensor_type IN ('room_sensor', 'dht22', 'pir', 'ultrasonic', 'combined')
             ORDER BY timestamp DESC
             LIMIT ?
         """, (cutoff_timestamp, limit))
