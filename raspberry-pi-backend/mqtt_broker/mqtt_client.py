@@ -95,6 +95,19 @@ class MQTTClient:
                 # If not JSON, create simple dict
                 payload = {"value": payload_str, "raw": payload_str}
             
+            # Ensure payload is a dictionary (JSON can parse to primitives like int, float, str)
+            if not isinstance(payload, dict):
+                if isinstance(payload, (int, float)):
+                    payload = {"value": payload, "raw": payload}
+                elif isinstance(payload, str):
+                    payload = {"value": payload, "raw": payload}
+                else:
+                    # Try to convert to dict if possible
+                    try:
+                        payload = dict(payload)
+                    except:
+                        payload = {"value": str(payload), "raw": payload}
+            
             # Add topic information
             payload["topic"] = topic
             payload["received_at"] = time.time()  # Use time.time() instead of event loop time
