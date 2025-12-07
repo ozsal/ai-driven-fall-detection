@@ -1,4 +1,0 @@
-"""
-Authentication and Authorization Module
-"""
-

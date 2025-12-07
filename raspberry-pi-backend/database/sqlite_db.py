@@ -91,23 +91,16 @@ async def init_database():
             )
         """)
         
-        # Users table - Authentication and Authorization
+        # Users table (for future use)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                email TEXT UNIQUE NOT NULL,
-                hashed_password TEXT NOT NULL,
-                role TEXT NOT NULL DEFAULT 'viewer',
-                is_active INTEGER DEFAULT 1,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                user_id TEXT PRIMARY KEY,
+                name TEXT,
+                email TEXT,
+                phone TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        
-        # Create index for faster lookups
-        await db.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)")
-        await db.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
         
         # Alert logs table
         await db.execute("""
