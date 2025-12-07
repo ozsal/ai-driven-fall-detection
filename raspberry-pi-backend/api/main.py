@@ -382,8 +382,10 @@ async def health_check():
     }
 
 @app.get("/api/devices", response_model=List[DeviceStatus])
-async def get_devices_endpoint():
-    """Get all device statuses"""
+async def get_devices_endpoint(
+    current_user: dict = Depends(require_role(["admin", "sensor_manager", "viewer"]))
+):
+    """Get all device statuses (Requires authentication)"""
     devices = await db_get_devices()
     return devices
 
@@ -442,9 +444,10 @@ async def update_sensor_status_endpoint(
 async def get_sensor_readings_endpoint(
     device_id: Optional[str] = None,
     sensor_type: Optional[str] = None,
-    limit: int = 100
+    limit: int = 100,
+    current_user: dict = Depends(require_role(["admin", "sensor_manager", "viewer"]))
 ):
-    """Get sensor readings with optional filters"""
+    """Get sensor readings with optional filters (Requires authentication)"""
     try:
         print(f"📊 API: Fetching sensor readings - device_id={device_id}, sensor_type={sensor_type}, limit={limit}")
         readings = await db_get_sensor_readings(
