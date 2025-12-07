@@ -21,6 +21,8 @@ from database.sqlite_db import (
 from mqtt_broker.mqtt_client import MQTTClient
 from ml_models.fall_detector import FallDetector
 from alerts.alert_manager import AlertManager
+from auth.routes import router as auth_router
+from auth.dependencies import get_current_user, require_viewer_or_above, require_admin
 
 
 # ==================== Global Variables ====================
@@ -114,6 +116,8 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Register authentication routes
+app.include_router(auth_router)
 
 # CORS middleware
 app.add_middleware(
@@ -422,8 +426,8 @@ async def health_check():
     }
 
 @app.get("/api/devices", response_model=List[DeviceStatus])
-async def get_devices_endpoint():
-    """Get all device statuses"""
+async def get_devices_endpoint(current_user: dict = Depends(require_viewer_or_above)):
+    """Get all device statuses (requires authentication)"""
     devices = await db_get_devices()
     return devices
 
@@ -463,9 +467,10 @@ async def get_dht22_sensors_status():
 async def update_sensor_status_endpoint(
     device_id: str,
     sensor_type: str,
-    status: str
+    status: str,
+    current_user: dict = Depends(require_admin)
 ):
-    """Update sensor status manually
+    """Update sensor status manually (admin only)
     
     Status values: 'active' or 'inactive'
     """
@@ -511,9 +516,10 @@ async def get_sensor_readings_endpoint(
 @app.get("/api/sensors/pir")
 async def get_pir_sensor_readings(
     device_id: Optional[str] = None,
-    limit: int = 100
+    limit: int = 100,
+    current_user: dict = Depends(require_viewer_or_above)
 ):
-    """Get PIR motion sensor readings"""
+    """Get PIR motion sensor readings (requires authentication)"""
     try:
         print(f"📊 API: Fetching PIR sensor readings - device_id={device_id}, limit={limit}")
         readings = await db_get_sensor_readings(
@@ -536,7 +542,8 @@ async def get_pir_sensor_readings(
 @app.get("/api/sensors/ultrasonic")
 async def get_ultrasonic_sensor_readings(
     device_id: Optional[str] = None,
-    limit: int = 100
+    limit: int = 100,
+    current_user: dict = Depends(require_viewer_or_above)
 ):
     """Get Ultrasonic distance sensor readings"""
     try:
@@ -561,7 +568,8 @@ async def get_ultrasonic_sensor_readings(
 @app.get("/api/sensors/dht22")
 async def get_dht22_sensor_readings(
     device_id: Optional[str] = None,
-    limit: int = 100
+    limit: int = 100,
+    current_user: dict = Depends(require_viewer_or_above)
 ):
     """Get DHT22 temperature/humidity sensor readings"""
     try:
@@ -590,15 +598,19 @@ async def get_dht22_sensor_readings(
 @app.get("/api/fall-events")
 async def get_fall_events(
     user_id: Optional[str] = None,
-    limit: int = 50
+    limit: int = 50,
+    current_user: dict = Depends(require_viewer_or_above)
 ):
-    """Get fall events"""
+    """Get fall events (requires authentication)"""
     events = await get_fall_events(user_id=user_id, limit=limit)
     return events
 
 @app.get("/api/fall-events/{event_id}")
-async def get_fall_event(event_id: str):
-    """Get specific fall event"""
+async def get_fall_event_endpoint(
+    event_id: str,
+    current_user: dict = Depends(require_viewer_or_above)
+):
+    """Get specific fall event (requires authentication)"""
     event = await get_fall_event(event_id)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
@@ -606,8 +618,11 @@ async def get_fall_event(event_id: str):
     return event
 
 @app.post("/api/fall-events/{event_id}/acknowledge")
-async def acknowledge_fall_event_endpoint(event_id: str):
-    """Acknowledge a fall event"""
+async def acknowledge_fall_event_endpoint(
+    event_id: str,
+    current_user: dict = Depends(require_viewer_or_above)
+):
+    """Acknowledge a fall event (requires authentication)"""
     result = await acknowledge_fall_event(event_id)
     
     if not result:
@@ -631,8 +646,8 @@ async def websocket_endpoint(websocket: WebSocket):
         websocket_connections.remove(websocket)
 
 @app.get("/api/statistics")
-async def get_statistics():
-    """Get system statistics"""
+async def get_statistics(current_user: dict = Depends(require_viewer_or_above)):
+    """Get system statistics (requires authentication)"""
     total_events = await count_fall_events()
     recent_events = await count_fall_events({
         "timestamp_gte": datetime.utcnow() - timedelta(days=7)

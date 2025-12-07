@@ -91,7 +91,7 @@ async def init_database():
             )
         """)
         
-        # Users table (for future use)
+        # Users table (for future use - legacy, kept for backward compatibility)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 user_id TEXT PRIMARY KEY,
@@ -101,6 +101,24 @@ async def init_database():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        
+        # Authentication users table
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS auth_users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                hashed_password TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'viewer',
+                is_active BOOLEAN DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP
+            )
+        """)
+        
+        # Create indexes for auth_users
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_auth_users_username ON auth_users(username)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_auth_users_email ON auth_users(email)")
         
         # Alert logs table
         await db.execute("""
@@ -155,6 +173,13 @@ async def init_database():
         except Exception as e:
             print(f"⚠️ Migration note: {e}")
             # Continue even if migration fails
+        
+        # Create default admin user if no auth users exist
+        try:
+            from auth.database import create_default_admin
+            await create_default_admin()
+        except Exception as e:
+            print(f"⚠️ Could not create default admin: {e}")
         
         print(f"Database initialized at {DB_PATH}")
 
