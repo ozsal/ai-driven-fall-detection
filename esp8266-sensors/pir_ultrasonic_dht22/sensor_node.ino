@@ -87,6 +87,8 @@ void setup() {
   
   // Initialize DHT22
   dht.begin();
+  delay(2000);  // Give DHT22 sensor time to stabilize (recommended: 2 seconds)
+  Serial.println("DHT22 sensor initialized");
   
   // Initial LED blink
   blink_led(3, 200);
@@ -218,15 +220,29 @@ void read_sensors() {
   distance = read_ultrasonic_distance();
   
   // Read DHT22 (temperature and humidity)
+  // Add small delay before reading to ensure sensor is ready
+  delay(100);
   float temp = dht.readTemperature();
   float hum = dht.readHumidity();
   
-  // Check if DHT22 read was successful
-  if (!isnan(temp) && !isnan(hum)) {
+  // Check if DHT22 read was successful and within valid ranges
+  if (!isnan(temp) && !isnan(hum) && temp > -40 && temp < 80 && hum >= 0 && hum <= 100) {
     temperature = temp;
     humidity = hum;
+    Serial.print("✓ DHT22 read successful: ");
+    Serial.print(temperature);
+    Serial.print("°C, ");
+    Serial.print(humidity);
+    Serial.println("%");
   } else {
-    Serial.println("Failed to read from DHT22 sensor!");
+    Serial.println("✗ Failed to read from DHT22 sensor!");
+    Serial.print("  Raw temp: ");
+    Serial.println(temp);
+    Serial.print("  Raw humidity: ");
+    Serial.println(hum);
+    // Reset to 0.0 to indicate invalid reading
+    temperature = 0.0;
+    humidity = 0.0;
   }
   
   // Print sensor readings to serial
@@ -311,16 +327,31 @@ void publish_sensor_data() {
   Serial.println(distance);
   
   // Publish DHT22 sensor data (temperature and humidity as JSON)
-  StaticJsonDocument<256> dht22_doc;
-  dht22_doc["device_id"] = device_id;
-  dht22_doc["temperature_c"] = temperature;
-  dht22_doc["humidity_percent"] = humidity;
-  dht22_doc["timestamp"] = millis();
-  char dht22_buffer[256];
-  serializeJson(dht22_doc, dht22_buffer);
-  client.publish(topic_dht22.c_str(), dht22_buffer);
-  Serial.print("Published DHT22: ");
-  Serial.println(dht22_buffer);
+  // Only publish if we have valid temperature and humidity readings (both must be valid)
+  if (temperature != 0.0 && humidity != 0.0) {
+    StaticJsonDocument<256> dht22_doc;
+    dht22_doc["device_id"] = device_id;
+    dht22_doc["temperature_c"] = temperature;
+    dht22_doc["humidity_percent"] = humidity;
+    dht22_doc["timestamp"] = millis();
+    char dht22_buffer[256];
+    serializeJson(dht22_doc, dht22_buffer);
+    
+    bool published = client.publish(topic_dht22.c_str(), dht22_buffer);
+    if (published) {
+      Serial.print("✓ Published DHT22: ");
+      Serial.println(dht22_buffer);
+    } else {
+      Serial.println("✗ Failed to publish DHT22 data to MQTT!");
+      Serial.print("  Topic: ");
+      Serial.println(topic_dht22);
+      Serial.print("  Payload: ");
+      Serial.println(dht22_buffer);
+    }
+  } else {
+    Serial.println("⚠️ Skipping DHT22 publish - invalid sensor readings (temp=0.0, humidity=0.0)");
+    Serial.println("  Check DHT22 sensor connection and wiring!");
+  }
   
   // Publish combined JSON data (all sensors together)
   client.publish(topic_combined.c_str(), json_buffer);

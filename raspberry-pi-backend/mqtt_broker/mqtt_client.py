@@ -22,7 +22,7 @@ class MQTTClient:
         self.connected = False
         self.event_loop: Optional[asyncio.AbstractEventLoop] = None
         self.broker_host = os.getenv("MQTT_BROKER_HOST", "10.162.131.191")
-        self.broker_port = int(os.getenv("MQTT_BROKER_PORT", 8883))
+        self.broker_port = int(os.getenv("MQTT_BROKER_PORT", 1883))  # Default to 1883 (non-encrypted) to match ESP8266
         self.username = os.getenv("MQTT_USERNAME", "")
         self.password = os.getenv("MQTT_PASSWORD", "")
         self.client_id = "raspberry_pi_backend"
@@ -61,9 +61,16 @@ class MQTTClient:
         self.client.on_disconnect = self._on_disconnect
         
         try:
+            print(f"MQTT client connecting to {self.broker_host}:{self.broker_port}")
             self.client.connect(self.broker_host, self.broker_port, 60)
             self.client.loop_start()
-            print(f"MQTT client connecting to {self.broker_host}:{self.broker_port}")
+            # Wait a moment for connection to establish
+            import time
+            time.sleep(1)
+            if self.connected:
+                print(f"✓ MQTT connection established to {self.broker_host}:{self.broker_port}")
+            else:
+                print(f"⚠️  MQTT connection initiated but not yet confirmed")
         except Exception as e:
             error_msg = f"MQTT connection error: {e}"
             print(f"⚠️  {error_msg}")
@@ -97,8 +104,27 @@ class MQTTClient:
         try:
             topic = msg.topic
             payload_str = msg.payload.decode('utf-8')
-            print(f"📨 Received MQTT message on topic: {topic}")
-            print(f"   Payload: {payload_str[:100]}...")  # Print first 100 chars
+            
+            # Enhanced logging for DHT22 messages
+            if "dht22" in topic.lower():
+                print(f"🌡️ DHT22 MQTT message received on topic: {topic}")
+                print(f"   Full payload: {payload_str}")
+                # Try to parse as JSON and check for temperature/humidity
+                try:
+                    temp_payload = json.loads(payload_str)
+                    if isinstance(temp_payload, dict):
+                        temp = temp_payload.get("temperature_c")
+                        hum = temp_payload.get("humidity_percent")
+                        if temp is not None or hum is not None:
+                            print(f"   ✓ DHT22 data found: temp={temp}°C, humidity={hum}%")
+                        else:
+                            print(f"   ⚠️ DHT22 payload missing temperature_c or humidity_percent")
+                            print(f"   Payload keys: {list(temp_payload.keys())}")
+                except:
+                    print(f"   ⚠️ DHT22 payload is not valid JSON")
+            else:
+                print(f"📨 Received MQTT message on topic: {topic}")
+                print(f"   Payload: {payload_str[:100]}...")  # Print first 100 chars
             
             # Try to parse as JSON
             try:

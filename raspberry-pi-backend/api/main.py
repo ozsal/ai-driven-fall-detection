@@ -199,55 +199,71 @@ async def handle_mqtt_message(topic: str, payload: dict):
         metadata_fields = {"device_id", "deviceId", "sensor_type", "sensorType", 
                           "timestamp", "time", "Timestamp", "location", "Location", 
                           "topic", "received_at", "receivedAt"}
-        sensor_data = {k: v for k, v in payload.items() if k not in metadata_fields}
         
         # Handle DHT22 sensor data specifically (temperature and humidity)
+        # Do this BEFORE extracting sensor_data to ensure proper handling
         if sensor_type == "dht22":
+            sensor_data = {}
             # DHT22 should have temperature_c and humidity_percent in payload
             if "temperature_c" in payload or "humidity_percent" in payload:
                 # Extract temperature and humidity from payload
-                sensor_data = {}
                 if "temperature_c" in payload:
                     try:
-                        sensor_data["temperature_c"] = float(payload.get("temperature_c", 0.0))
-                    except (ValueError, TypeError):
+                        temp_val = payload.get("temperature_c")
+                        sensor_data["temperature_c"] = float(temp_val) if temp_val is not None else 0.0
+                    except (ValueError, TypeError) as e:
+                        print(f"   ⚠️ Error parsing temperature_c: {e}, value: {payload.get('temperature_c')}")
                         sensor_data["temperature_c"] = 0.0
                 if "humidity_percent" in payload:
                     try:
-                        sensor_data["humidity_percent"] = float(payload.get("humidity_percent", 0.0))
-                    except (ValueError, TypeError):
+                        hum_val = payload.get("humidity_percent")
+                        sensor_data["humidity_percent"] = float(hum_val) if hum_val is not None else 0.0
+                    except (ValueError, TypeError) as e:
+                        print(f"   ⚠️ Error parsing humidity_percent: {e}, value: {payload.get('humidity_percent')}")
                         sensor_data["humidity_percent"] = 0.0
                 print(f"   🌡️ DHT22 data extracted: temp={sensor_data.get('temperature_c')}°C, humidity={sensor_data.get('humidity_percent')}%")
             elif "value" in payload:
                 # Fallback for primitive payloads
                 sensor_data = {"value": payload.get("value")}
-            elif not sensor_data:
-                # If no DHT22 data found, log warning
-                print(f"   ⚠️ WARNING: DHT22 payload missing temperature_c and humidity_percent fields")
-                print(f"   Payload keys: {list(payload.keys())}")
-                sensor_data = {"error": "missing_temperature_humidity_data"}
-        
-        # If sensor_data is empty or only has "value"/"raw" (from primitive conversion),
-        # create proper sensor data structure for other sensors
-        elif not sensor_data or (len(sensor_data) <= 2 and "value" in payload):
-            # For primitive payloads (like "1" or "25.5"), use the value
-            if "value" in payload:
-                # Create sensor-specific data structure
-                if sensor_type == "pir":
-                    sensor_data = {"motion_detected": bool(payload.get("value") == "1" or payload.get("value") == 1)}
-                elif sensor_type == "ultrasonic":
-                    try:
-                        distance = float(payload.get("value", 0))
-                        sensor_data = {"distance_cm": distance}
-                    except:
-                        sensor_data = {"distance_cm": 0.0}
-                else:
-                    sensor_data = {"value": payload.get("value")}
+                print(f"   ⚠️ DHT22 using fallback value: {payload.get('value')}")
             else:
-                # Use entire payload as data, removing metadata
-                sensor_data = payload.copy()
-                for key in metadata_fields:
-                    sensor_data.pop(key, None)
+                # If no DHT22 data found, try to extract from sensor_data dict
+                # Sometimes the data might be nested
+                temp_data = {k: v for k, v in payload.items() if k not in metadata_fields}
+                if temp_data:
+                    sensor_data = temp_data
+                    print(f"   ℹ️ DHT22 using extracted sensor_data: {sensor_data}")
+                else:
+                    # Last resort: log warning
+                    print(f"   ⚠️ WARNING: DHT22 payload missing temperature_c and humidity_percent fields")
+                    print(f"   Payload keys: {list(payload.keys())}")
+                    print(f"   Full payload: {payload}")
+                    sensor_data = {"error": "missing_temperature_humidity_data"}
+        else:
+            # For non-DHT22 sensors, extract sensor data normally
+            sensor_data = {k: v for k, v in payload.items() if k not in metadata_fields}
+            
+            # If sensor_data is empty or only has "value"/"raw" (from primitive conversion),
+            # create proper sensor data structure for other sensors
+            if not sensor_data or (len(sensor_data) <= 2 and "value" in payload):
+                # For primitive payloads (like "1" or "25.5"), use the value
+                if "value" in payload:
+                    # Create sensor-specific data structure
+                    if sensor_type == "pir":
+                        sensor_data = {"motion_detected": bool(payload.get("value") == "1" or payload.get("value") == 1)}
+                    elif sensor_type == "ultrasonic":
+                        try:
+                            distance = float(payload.get("value", 0))
+                            sensor_data = {"distance_cm": distance}
+                        except:
+                            sensor_data = {"distance_cm": 0.0}
+                    else:
+                        sensor_data = {"value": payload.get("value")}
+                elif not sensor_data:
+                    # Use entire payload as data, removing metadata
+                    sensor_data = payload.copy()
+                    for key in metadata_fields:
+                        sensor_data.pop(key, None)
         
         # Prepare data for database insertion
         db_reading = {
@@ -261,11 +277,17 @@ async def handle_mqtt_message(topic: str, payload: dict):
         
         # Store sensor reading in database (real-time storage)
         print(f"💾 Attempting to store reading: device_id={device_id}, sensor_type={sensor_type}, topic={topic}")
+        if sensor_type == "dht22":
+            print(f"   🌡️ DHT22 sensor_data before storage: {sensor_data}")
+            print(f"   🌡️ DHT22 payload keys: {list(payload.keys())}")
+            print(f"   🌡️ DHT22 payload values: temperature_c={payload.get('temperature_c')}, humidity_percent={payload.get('humidity_percent')}")
         try:
             reading_id = await insert_sensor_reading(db_reading)
             print(f"✅ SUCCESS: Stored sensor reading #{reading_id} from {device_id} ({sensor_type}) on topic '{topic}' at {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}")
             print(f"   Device ID: {device_id}, Sensor Type: {sensor_type}, Location: {location}")
             print(f"   Data: {sensor_data}")
+            if sensor_type == "dht22":
+                print(f"   🌡️ DHT22 stored with: temp={sensor_data.get('temperature_c')}°C, humidity={sensor_data.get('humidity_percent')}%")
         except Exception as db_error:
             print(f"❌ DATABASE ERROR: Failed to store reading: {db_error}")
             import traceback
@@ -550,6 +572,10 @@ async def get_dht22_sensor_readings(
             limit=limit
         )
         print(f"📊 API: Returning {len(readings)} DHT22 sensor readings")
+        if len(readings) > 0:
+            print(f"   🌡️ Sample DHT22 reading: {readings[0]}")
+            if readings[0].get("data"):
+                print(f"   🌡️ Sample data field: {readings[0]['data']}")
         return readings
     except Exception as e:
         import traceback
