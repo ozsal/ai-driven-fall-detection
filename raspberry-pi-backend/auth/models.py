@@ -1,16 +1,26 @@
 """
 User Authentication Models
 """
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, field_validator
 from typing import Optional
 from datetime import datetime
+import re
 
 class UserCreate(BaseModel):
     """Model for creating a new user"""
     username: str
-    email: EmailStr
+    email: str
     password: str
     role: str = "viewer"  # Default role
+    
+    @field_validator('email')
+    @classmethod
+    def validate_email(cls, v):
+        """Validate email format"""
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_pattern, v):
+            raise ValueError('Invalid email format')
+        return v
 
 class UserLogin(BaseModel):
     """Model for user login"""
