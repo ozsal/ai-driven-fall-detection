@@ -4,6 +4,7 @@ Raspberry Pi Backend for Fall Detection System
 """
 
 from fastapi import FastAPI, HTTPException, Depends, WebSocket, WebSocketDisconnect
+from auth.dependencies import require_role
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
@@ -124,6 +125,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include authentication routes
+from auth.routes import router as auth_router
+app.include_router(auth_router)
 
 # ==================== MQTT Message Handler ====================
 async def handle_mqtt_message(topic: str, payload: dict):
