@@ -1,0 +1,22 @@
+[Unit]
+Description=AI-Driven Fall Detection Backend Service
+After=network.target mosquitto.service
+Wants=mosquitto.service
+
+[Service]
+Type=simple
+User=uel
+Group=uel
+WorkingDirectory=/home/uel/ai-driven-fall-detection/raspberry-pi-backend
+Environment="PATH=/home/uel/ai-driven-fall-detection/raspberry-pi-backend/venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="API_HOST=0.0.0.0"
+Environment="API_PORT=8000"
+ExecStart=/home/uel/ai-driven-fall-detection/raspberry-pi-backend/venv/bin/python /home/uel/ai-driven-fall-detection/raspberry-pi-backend/api/main.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+
