@@ -23,6 +23,15 @@ from mqtt_broker.mqtt_client import MQTTClient
 from ml_models.fall_detector import FallDetector
 from alerts.alert_manager import AlertManager
 
+# Import v2 modules (optional - only if files exist)
+try:
+    from database.database_v2 import migrate_database_to_v2
+    from api.routes_v2 import router as v2_router
+    V2_AVAILABLE = True
+except ImportError:
+    V2_AVAILABLE = False
+    print("⚠️ v2 modules not found - continuing with legacy schema only")
+
 # ==================== Global Variables ====================
 mqtt_client: Optional[MQTTClient] = None
 fall_detector: Optional[FallDetector] = None
