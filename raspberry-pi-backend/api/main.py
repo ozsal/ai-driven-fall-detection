@@ -206,9 +206,35 @@ async def handle_mqtt_message(topic: str, payload: dict):
                           "topic", "received_at", "receivedAt"}
         sensor_data = {k: v for k, v in payload.items() if k not in metadata_fields}
         
+        # Handle DHT22 sensor data specifically (temperature and humidity)
+        if sensor_type == "dht22":
+            # DHT22 should have temperature_c and humidity_percent in payload
+            if "temperature_c" in payload or "humidity_percent" in payload:
+                # Extract temperature and humidity from payload
+                sensor_data = {}
+                if "temperature_c" in payload:
+                    try:
+                        sensor_data["temperature_c"] = float(payload.get("temperature_c", 0.0))
+                    except (ValueError, TypeError):
+                        sensor_data["temperature_c"] = 0.0
+                if "humidity_percent" in payload:
+                    try:
+                        sensor_data["humidity_percent"] = float(payload.get("humidity_percent", 0.0))
+                    except (ValueError, TypeError):
+                        sensor_data["humidity_percent"] = 0.0
+                print(f"   🌡️ DHT22 data extracted: temp={sensor_data.get('temperature_c')}°C, humidity={sensor_data.get('humidity_percent')}%")
+            elif "value" in payload:
+                # Fallback for primitive payloads
+                sensor_data = {"value": payload.get("value")}
+            elif not sensor_data:
+                # If no DHT22 data found, log warning
+                print(f"   ⚠️ WARNING: DHT22 payload missing temperature_c and humidity_percent fields")
+                print(f"   Payload keys: {list(payload.keys())}")
+                sensor_data = {"error": "missing_temperature_humidity_data"}
+        
         # If sensor_data is empty or only has "value"/"raw" (from primitive conversion),
-        # create proper sensor data structure
-        if not sensor_data or (len(sensor_data) <= 2 and "value" in payload):
+        # create proper sensor data structure for other sensors
+        elif not sensor_data or (len(sensor_data) <= 2 and "value" in payload):
             # For primitive payloads (like "1" or "25.5"), use the value
             if "value" in payload:
                 # Create sensor-specific data structure
@@ -220,9 +246,6 @@ async def handle_mqtt_message(topic: str, payload: dict):
                         sensor_data = {"distance_cm": distance}
                     except:
                         sensor_data = {"distance_cm": 0.0}
-                elif sensor_type == "dht22":
-                    # DHT22 should have JSON, but handle primitive case
-                    sensor_data = {"value": payload.get("value")}
                 else:
                     sensor_data = {"value": payload.get("value")}
             else:
