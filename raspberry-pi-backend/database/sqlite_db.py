@@ -163,6 +163,13 @@ async def init_database():
             print(f"⚠️ Migration note: {e}")
             # Continue even if migration fails
         
+        # Create default admin user if no users exist
+        try:
+            from auth.database import create_default_admin
+            await create_default_admin()
+        except Exception as e:
+            print(f"⚠️ Could not create default admin: {e}")
+        
         print(f"Database initialized at {DB_PATH}")
 
 async def insert_sensor_reading(reading_data: Dict[str, Any]) -> int:
