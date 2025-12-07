@@ -104,7 +104,13 @@ async def lifespan(app: FastAPI):
         if mqtt_client.is_connected():
             print("✓ MQTT client connected")
             # Start MQTT message processing
-            mqtt_client.set_message_handler(handle_mqtt_message)
+            # Use v2 handler if available (it handles both v2 and legacy formats)
+            if V2_AVAILABLE and handle_mqtt_message_v2:
+                mqtt_client.set_message_handler(handle_mqtt_message_v2)
+                print("✓ Using v2 MQTT handler (supports both v2 and legacy formats)")
+            else:
+                mqtt_client.set_message_handler(handle_mqtt_message)
+                print("✓ Using legacy MQTT handler")
         else:
             print("⚠️  MQTT client initialized but not connected. Will retry in background.")
     except Exception as e:
