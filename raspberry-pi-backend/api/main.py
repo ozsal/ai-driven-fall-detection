@@ -69,6 +69,17 @@ async def lifespan(app: FastAPI):
     await init_database()
     print("Database initialized")
     
+    # Run v2 migration if available (extends schema without breaking existing)
+    if V2_AVAILABLE:
+        try:
+            print("🔄 Running database migration to v2 schema...")
+            await migrate_database_to_v2()
+            print("✅ v2 migration completed")
+        except Exception as e:
+            print(f"⚠️ v2 migration warning (continuing anyway): {e}")
+            import traceback
+            traceback.print_exc()
+    
     # Initialize MQTT client (non-blocking - allow API to start even if MQTT fails)
     mqtt_client = MQTTClient()
     try:
@@ -113,6 +124,11 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+# Include v2 routes if available
+if V2_AVAILABLE:
+    app.include_router(v2_router, prefix="/api/v2", tags=["v2"])
+    print("✅ v2 API routes registered at /api/v2")
 
 # CORS middleware
 app.add_middleware(
