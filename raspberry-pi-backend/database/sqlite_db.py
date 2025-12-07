@@ -653,3 +653,83 @@ async def insert_alert_log(event_id: int, channels: List[str], status: str):
         
         await db.commit()
 
+async def get_sensors(sensor_type: Optional[str] = None, device_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Get all sensors with their status
+    
+    Args:
+        sensor_type: Filter by sensor type (pir, ultrasonic, dht22)
+        device_id: Filter by device ID
+    """
+    try:
+        # Ensure database exists
+        if not os.path.exists(DB_PATH):
+            print(f"Warning: Database file not found at {DB_PATH}. Initializing...")
+            await init_database()
+        
+        async with aiosqlite.connect(DB_PATH) as db:
+            db.row_factory = dict_factory
+            
+            query = "SELECT * FROM sensors WHERE 1=1"
+            params = []
+            
+            if sensor_type:
+                query += " AND sensor_type = ?"
+                params.append(sensor_type)
+            
+            if device_id:
+                query += " AND device_id = ?"
+                params.append(device_id)
+            
+            query += " ORDER BY last_seen DESC"
+            
+            try:
+                cursor = await db.execute(query, params)
+                rows = await cursor.fetchall()
+            except Exception as e:
+                print(f"Error querying sensors table: {e}")
+                return []
+            
+            # Update status based on last_seen (active if seen in last 5 minutes)
+            cutoff_time = datetime.utcnow() - timedelta(minutes=5)
+            for row in rows:
+                last_seen = row.get("last_seen")
+                if last_seen:
+                    if isinstance(last_seen, str):
+                        try:
+                            last_seen = datetime.fromisoformat(last_seen.replace('Z', '+00:00'))
+                            if last_seen.tzinfo:
+                                last_seen = last_seen.replace(tzinfo=None)
+                        except:
+                            last_seen = datetime.utcnow()
+                    
+                    # Update status: active if seen in last 5 minutes
+                    if last_seen >= cutoff_time:
+                        row["status"] = "active"
+                    else:
+                        row["status"] = "inactive"
+            
+            return rows
+    except Exception as e:
+        print(f"Error in get_sensors: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
+
+async def update_sensor_status(device_id: str, sensor_type: str, status: str):
+    """Update sensor status manually"""
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            db.row_factory = dict_factory
+            
+            await db.execute("""
+                UPDATE sensors 
+                SET status = ?
+                WHERE device_id = ? AND sensor_type = ?
+            """, (status, device_id, sensor_type))
+            
+            await db.commit()
+            return True
+    except Exception as e:
+        print(f"Error updating sensor status: {e}")
+        return False
+
