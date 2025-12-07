@@ -23,16 +23,6 @@ from mqtt_broker.mqtt_client import MQTTClient
 from ml_models.fall_detector import FallDetector
 from alerts.alert_manager import AlertManager
 
-# Import v2 modules (optional - only if files exist)
-try:
-    from database.database_v2 import migrate_database_to_v2
-    from api.routes_v2 import router as v2_router
-    from api.mqtt_handler_v2 import handle_mqtt_message_v2
-    V2_AVAILABLE = True
-except ImportError:
-    V2_AVAILABLE = False
-    handle_mqtt_message_v2 = None
-    print("⚠️ v2 modules not found - continuing with legacy schema only")
 
 # ==================== Global Variables ====================
 mqtt_client: Optional[MQTTClient] = None
@@ -80,17 +70,6 @@ async def lifespan(app: FastAPI):
     await init_database()
     print("Database initialized")
     
-    # Run v2 migration if available (extends schema without breaking existing)
-    if V2_AVAILABLE:
-        try:
-            print("🔄 Running database migration to v2 schema...")
-            await migrate_database_to_v2()
-            print("✅ v2 migration completed")
-        except Exception as e:
-            print(f"⚠️ v2 migration warning (continuing anyway): {e}")
-            import traceback
-            traceback.print_exc()
-    
     # Initialize MQTT client (non-blocking - allow API to start even if MQTT fails)
     mqtt_client = MQTTClient()
     try:
@@ -104,13 +83,7 @@ async def lifespan(app: FastAPI):
         if mqtt_client.is_connected():
             print("✓ MQTT client connected")
             # Start MQTT message processing
-            # Use v2 handler if available (it handles both v2 and legacy formats)
-            if V2_AVAILABLE and handle_mqtt_message_v2:
-                mqtt_client.set_message_handler(handle_mqtt_message_v2)
-                print("✓ Using v2 MQTT handler (supports both v2 and legacy formats)")
-            else:
-                mqtt_client.set_message_handler(handle_mqtt_message)
-                print("✓ Using legacy MQTT handler")
+            mqtt_client.set_message_handler(handle_mqtt_message)
         else:
             print("⚠️  MQTT client initialized but not connected. Will retry in background.")
     except Exception as e:
@@ -142,10 +115,6 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Include v2 routes if available
-if V2_AVAILABLE:
-    app.include_router(v2_router, prefix="/api/v2", tags=["v2"])
-    print("✅ v2 API routes registered at /api/v2")
 
 # CORS middleware
 app.add_middleware(
