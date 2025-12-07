@@ -27,9 +27,11 @@ from alerts.alert_manager import AlertManager
 try:
     from database.database_v2 import migrate_database_to_v2
     from api.routes_v2 import router as v2_router
+    from api.mqtt_handler_v2 import handle_mqtt_message_v2
     V2_AVAILABLE = True
 except ImportError:
     V2_AVAILABLE = False
+    handle_mqtt_message_v2 = None
     print("⚠️ v2 modules not found - continuing with legacy schema only")
 
 # ==================== Global Variables ====================

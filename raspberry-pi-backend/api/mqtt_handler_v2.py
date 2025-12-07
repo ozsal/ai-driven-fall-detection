@@ -54,9 +54,39 @@ async def handle_mqtt_message_v2(topic: str, payload: dict, broadcast_to_websock
             # ============================================
             # LEGACY FORMAT: Use existing handler
             # ============================================
-            # Import and call the original handler
-            from api.main import handle_mqtt_message
-            await handle_mqtt_message(topic, payload)
+            # Import and call the original handler (avoid circular import)
+            import sys
+            import importlib
+            if 'api.main' in sys.modules:
+                main_module = sys.modules['api.main']
+                if hasattr(main_module, 'handle_mqtt_message'):
+                    await main_module.handle_mqtt_message(topic, payload)
+                else:
+                    # Fallback: create a simple handler
+                    print(f"⚠️ Legacy handler not available, processing as basic message")
+                    from database.sqlite_db import insert_sensor_reading
+                    # Extract basic info and store
+                    device_id = payload.get("device_id", "unknown")
+                    sensor_type = payload.get("sensor_type", "unknown")
+                    await insert_sensor_reading({
+                        "device_id": device_id,
+                        "sensor_type": sensor_type,
+                        "timestamp": payload.get("timestamp", int(datetime.utcnow().timestamp())),
+                        "data": payload,
+                        "location": payload.get("location"),
+                        "topic": topic
+                    })
+            else:
+                # If main module not loaded, use basic storage
+                from database.sqlite_db import insert_sensor_reading
+                await insert_sensor_reading({
+                    "device_id": payload.get("device_id", "unknown"),
+                    "sensor_type": payload.get("sensor_type", "unknown"),
+                    "timestamp": payload.get("timestamp", int(datetime.utcnow().timestamp())),
+                    "data": payload,
+                    "location": payload.get("location"),
+                    "topic": topic
+                })
             
     except Exception as e:
         print(f"❌ Error in handle_mqtt_message_v2: {e}")
