@@ -141,3 +141,4 @@ When everything works:
    - Check backend logs for errors
    - Run diagnostic script: `python diagnose_sensor_data.py`
 
+

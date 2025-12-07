@@ -263,3 +263,4 @@ Existing sensor readings will not automatically create sensor records, but new r
 
 Each sensor (PIR, Ultrasonic, DHT22) now has its own active status in the database!
 
+

@@ -207,3 +207,4 @@ ORDER BY sr.id DESC;
 ✅ **Status Tracking** - Devices show online/offline based on recent data
 ✅ **Backward Compatible** - Old code still works with sensors table
 
+

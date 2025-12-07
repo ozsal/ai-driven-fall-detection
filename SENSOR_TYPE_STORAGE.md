@@ -172,3 +172,4 @@ You should see:
 
 All sensor types are now properly stored in the database!
 
+

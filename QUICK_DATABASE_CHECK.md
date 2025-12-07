@@ -51,3 +51,4 @@ The data is not being stored. Check backend logs for:
 sqlite3 fall_detection.db "SELECT COUNT(*) FROM sensor_readings;"
 ```
 
+

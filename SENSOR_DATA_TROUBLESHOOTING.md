@@ -186,3 +186,4 @@ When everything is working:
 5. **Verify credentials** - MQTT username/password
 6. **Check topics** - Make sure sensors use correct topic format
 
+
