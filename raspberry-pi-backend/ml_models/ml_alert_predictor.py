@@ -7,7 +7,10 @@ import numpy as np
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime
 from ml_models.model_loader import ModelLoader
-from alerts.alert_engine import AlertSeverity, AlertType
+
+# Use string literals to avoid circular import
+# Alert types and severities are defined in alerts.alert_engine
+# but we use string values here to avoid circular dependency
 
 class MLAlertPredictor:
     """Predicts alerts using trained ML models"""
@@ -92,7 +95,7 @@ class MLAlertPredictor:
                 severity = self._determine_severity_from_probability(probability, temperature)
                 
                 return {
-                    "alert_type": AlertType.UNSAFE_TEMPERATURE.value,
+                    "alert_type": "unsafe_temperature",
                     "severity": severity,
                     "message": f"🤖 ML DETECTED: Temperature anomaly detected ({temperature:.1f}°C, confidence: {probability*100:.1f}%)",
                     "sensor_values": {
@@ -162,10 +165,10 @@ class MLAlertPredictor:
             is_fire_risk = prediction == 1 or (probability and probability > 0.6)
             
             if is_fire_risk:
-                severity = AlertSeverity.EXTREME.value if probability and probability > 0.8 else AlertSeverity.HIGH.value
+                severity = "extreme" if probability and probability > 0.8 else "high"
                 
                 return {
-                    "alert_type": AlertType.FIRE_RISK.value,
+                    "alert_type": "fire_risk",
                     "severity": severity,
                     "message": f"🔥 ML DETECTED: Fire risk predicted (temp: {temperature:.1f}°C, confidence: {probability*100:.1f}%)",
                     "sensor_values": {
@@ -231,8 +234,8 @@ class MLAlertPredictor:
             
             if is_anomaly:
                 return {
-                    "alert_type": AlertType.MOTION_ANOMALY.value,
-                    "severity": AlertSeverity.MEDIUM.value,
+                    "alert_type": "motion_anomaly",
+                    "severity": "medium",
                     "message": f"🤖 ML DETECTED: Unusual motion pattern detected (confidence: {probability*100:.1f}%)",
                     "sensor_values": {
                         "motion_detected": motion_detected,
@@ -364,10 +367,10 @@ class MLAlertPredictor:
         z_score = abs((temperature - mean_temp) / max(std_temp, 0.1))
         
         if z_score > 3.0:  # 3-sigma rule
-            severity = AlertSeverity.HIGH.value if z_score > 4.0 else AlertSeverity.MEDIUM.value
+            severity = "high" if z_score > 4.0 else "medium"
             
             return {
-                "alert_type": AlertType.UNSAFE_TEMPERATURE.value,
+                "alert_type": "unsafe_temperature",
                 "severity": severity,
                 "message": f"📊 STATISTICAL: Temperature anomaly detected ({temperature:.1f}°C, z-score: {z_score:.2f})",
                 "sensor_values": {
@@ -391,8 +394,8 @@ class MLAlertPredictor:
         """Fallback: Rule-based fire risk detection"""
         if temperature > 40.0:
             return {
-                "alert_type": AlertType.FIRE_RISK.value,
-                "severity": AlertSeverity.EXTREME.value,
+                "alert_type": "fire_risk",
+                "severity": "extreme",
                 "message": f"🔥 RULE-BASED: High temperature fire risk ({temperature:.1f}°C)",
                 "sensor_values": {
                     "temperature_c": temperature,
@@ -411,18 +414,18 @@ class MLAlertPredictor:
         if probability is None:
             # Fallback to temperature-based severity
             if temperature > 35.0:
-                return AlertSeverity.EXTREME.value
+                return "extreme"
             elif temperature > 30.0:
-                return AlertSeverity.HIGH.value
+                return "high"
             else:
-                return AlertSeverity.MEDIUM.value
+                return "medium"
         
         if probability > 0.9:
-            return AlertSeverity.EXTREME.value
+            return "extreme"
         elif probability > 0.75:
-            return AlertSeverity.HIGH.value
+            return "high"
         elif probability > 0.6:
-            return AlertSeverity.MEDIUM.value
+            return "medium"
         else:
-            return AlertSeverity.LOW.value
+            return "low"
 

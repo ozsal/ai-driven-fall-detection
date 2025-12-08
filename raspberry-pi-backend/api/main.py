@@ -26,7 +26,6 @@ from alerts.alert_engine import AlertEngine
 from mqtt_broker.mqtt_client import MQTTClient
 from ml_models.fall_detector import FallDetector
 from alerts.alert_manager import AlertManager
-from alerts.alert_engine import AlertEngine
 from database.alert_db import (
     insert_alert, get_alerts, get_latest_alerts, get_alert_by_id,
     acknowledge_alert, count_alerts, get_recent_sensor_readings
