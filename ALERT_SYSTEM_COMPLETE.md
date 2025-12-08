@@ -231,7 +231,7 @@ curl http://localhost:8000/api/alerts/stats/summary \
 
 ## 📚 Documentation
 
-- `ALERT_SYSTEM_SETUP.md` - Complete setup guide
+- `Installation.md` - Complete setup guide for entire system
 - `ALERT_SYSTEM_COMPLETE.md` - This file (overview)
 
 ## 🎉 Ready to Use!

@@ -32,8 +32,8 @@ AI-driven-fall-detection/
 │   └── flutter-app/
 ├── docs/
 │   ├── architecture.md
-│   ├── hardware_setup.md
 │   └── flowcharts.md
+├── Installation.md
 └── README.md
 ```
 
@@ -81,7 +81,7 @@ AI-driven-fall-detection/
 
 ## 🔧 Hardware Connections
 
-See `docs/hardware_setup.md` for detailed pin mappings and connection diagrams.
+See `Installation.md` for detailed pin mappings, connection diagrams, and complete setup instructions.
 
 ## 📊 Features
 
@@ -95,8 +95,8 @@ See `docs/hardware_setup.md` for detailed pin mappings and connection diagrams.
 
 ## 📖 Documentation
 
+- [Complete Installation Guide](Installation.md) - All setup instructions in one place
 - [System Architecture](docs/architecture.md)
-- [Hardware Setup](docs/hardware_setup.md)
 - [Flowcharts](docs/flowcharts.md)
 
 ## 🤝 Contributing
