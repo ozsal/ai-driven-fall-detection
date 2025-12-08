@@ -7,6 +7,15 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 from enum import Enum
 import json
+import os
+
+# Import ML predictor (optional - will work without ML models)
+try:
+    from ml_models.ml_alert_predictor import MLAlertPredictor
+    ML_AVAILABLE = True
+except ImportError:
+    ML_AVAILABLE = False
+    MLAlertPredictor = None
 
 class AlertSeverity(str, Enum):
     """Alert severity levels"""
@@ -27,7 +36,7 @@ class AlertType(str, Enum):
 class AlertEngine:
     """Engine for evaluating sensor data and triggering alerts"""
     
-    def __init__(self):
+    def __init__(self, use_ml: bool = True):
         # Temperature thresholds (Celsius)
         self.temp_normal_min = 18.0
         self.temp_normal_max = 26.0
@@ -54,6 +63,25 @@ class AlertEngine:
         # Time windows for trend analysis
         self.trend_window_minutes = 5
         self.spike_window_minutes = 2
+        
+        # ML-based alert prediction
+        self.use_ml = use_ml and ML_AVAILABLE
+        self.ml_predictor = None
+        
+        if self.use_ml:
+            try:
+                # Determine models directory path
+                models_dir = os.path.join(
+                    os.path.dirname(os.path.dirname(__file__)),
+                    "ml_models", "models"
+                )
+                self.ml_predictor = MLAlertPredictor(models_dir=models_dir)
+                self.ml_predictor.load_models()
+                print("✓ ML Alert Predictor initialized")
+            except Exception as e:
+                print(f"⚠️ Failed to initialize ML Alert Predictor: {e}")
+                self.use_ml = False
+                self.ml_predictor = None
         
     def evaluate_sensor_reading(
         self, 
@@ -103,6 +131,31 @@ class AlertEngine:
         if temperature is None or humidity is None:
             return alerts
         
+        # ML-based predictions (if available)
+        if self.use_ml and self.ml_predictor:
+            try:
+                # ML fire risk prediction
+                ml_fire_alert = self.ml_predictor.predict_fire_risk(
+                    temperature, humidity, recent_readings
+                )
+                if ml_fire_alert:
+                    ml_fire_alert["device_id"] = device_id
+                    ml_fire_alert["triggered_at"] = datetime.utcnow().isoformat()
+                    alerts.append(ml_fire_alert)
+                
+                # ML temperature anomaly prediction
+                ml_temp_alert = self.ml_predictor.predict_temperature_anomaly(
+                    temperature, humidity, recent_readings
+                )
+                if ml_temp_alert:
+                    ml_temp_alert["device_id"] = device_id
+                    ml_temp_alert["triggered_at"] = datetime.utcnow().isoformat()
+                    alerts.append(ml_temp_alert)
+            except Exception as e:
+                print(f"⚠️ ML prediction error: {e}")
+                # Continue with rule-based evaluation
+        
+        # Rule-based checks (always run as fallback/verification)
         # Check for fire risk conditions
         fire_alerts = self._check_fire_risk(device_id, temperature, humidity, timestamp, recent_readings)
         alerts.extend(fire_alerts)
@@ -407,8 +460,47 @@ class AlertEngine:
         
         motion_detected = sensor_data.get("motion_detected", False)
         
-        # Optional: Add motion anomaly detection logic here
-        # For example: detect unusual motion patterns, extended motion, etc.
+        # ML-based motion anomaly detection (if available)
+        if self.use_ml and self.ml_predictor:
+            try:
+                # Get distance from recent readings if available
+                distance = None
+                if recent_readings:
+                    for r in recent_readings:
+                        if r.get("sensor_type") == "ultrasonic":
+                            distance = r.get("data", {}).get("distance_cm")
+                            break
+                
+                ml_motion_alert = self.ml_predictor.predict_motion_anomaly(
+                    motion_detected, distance, recent_readings
+                )
+                if ml_motion_alert:
+                    ml_motion_alert["device_id"] = device_id
+                    ml_motion_alert["triggered_at"] = datetime.utcnow().isoformat()
+                    alerts.append(ml_motion_alert)
+            except Exception as e:
+                print(f"⚠️ ML motion prediction error: {e}")
+        
+        # Rule-based motion anomaly detection
+        # Detect extended motion (potential issue)
+        if recent_readings and len(recent_readings) >= 5:
+            motion_count = sum(1 for r in recent_readings[-10:]
+                              if r.get("sensor_type") == "pir" 
+                              and r.get("data", {}).get("motion_detected", False))
+            
+            # If motion detected for extended period, might indicate issue
+            if motion_count >= 8 and motion_detected:
+                alerts.append({
+                    "device_id": device_id,
+                    "alert_type": AlertType.MOTION_ANOMALY.value,
+                    "severity": AlertSeverity.LOW.value,
+                    "message": f"⚠️ Extended motion detected ({motion_count}/10 recent readings)",
+                    "sensor_values": {
+                        "motion_detected": motion_detected,
+                        "motion_count": motion_count
+                    },
+                    "triggered_at": datetime.utcnow().isoformat()
+                })
         
         return alerts
     
