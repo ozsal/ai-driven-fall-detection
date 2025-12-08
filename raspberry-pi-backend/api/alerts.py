@@ -2,6 +2,11 @@
 Alert API endpoints
 """
 
+import sys
+import os
+# Add parent directory to path so imports work when running as script
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional
 from auth.dependencies import require_viewer_or_above, require_admin

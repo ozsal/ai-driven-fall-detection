@@ -3,6 +3,11 @@ FastAPI Main Application
 Raspberry Pi Backend for Fall Detection System
 """
 
+import sys
+import os
+# Add parent directory to path so imports work when running as script
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from fastapi import FastAPI, HTTPException, Depends, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
