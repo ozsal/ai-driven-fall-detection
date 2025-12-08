@@ -1,0 +1,127 @@
+.alert-banner-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  pointer-events: none;
+}
+
+.alert-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  pointer-events: all;
+  animation: slideDown 0.3s ease-out;
+  backdrop-filter: blur(10px);
+  border-left: 4px solid;
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.alert-banner-extreme {
+  background: linear-gradient(135deg, #ff1744 0%, #d50000 100%);
+  color: white;
+  border-left-color: #ff1744;
+  animation: slideDown 0.3s ease-out, pulse 2s infinite;
+}
+
+.alert-banner-high {
+  background: linear-gradient(135deg, #ff6f00 0%, #e65100 100%);
+  color: white;
+  border-left-color: #ff6f00;
+}
+
+.alert-banner-medium {
+  background: linear-gradient(135deg, #ffc107 0%, #ff8f00 100%);
+  color: #212121;
+  border-left-color: #ffc107;
+}
+
+.alert-banner-low {
+  background: linear-gradient(135deg, #64b5f6 0%, #1976d2 100%);
+  color: white;
+  border-left-color: #64b5f6;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    box-shadow: 0 4px 12px rgba(255, 23, 68, 0.3);
+  }
+  50% {
+    box-shadow: 0 4px 20px rgba(255, 23, 68, 0.6);
+  }
+}
+
+.alert-banner-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.alert-banner-icon {
+  font-size: 24px;
+  animation: bounce 1s infinite;
+}
+
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.alert-banner-message {
+  font-weight: 600;
+  font-size: 14px;
+  flex: 1;
+}
+
+.alert-banner-device {
+  font-size: 12px;
+  opacity: 0.9;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.alert-banner-dismiss {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: inherit;
+  font-size: 24px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  margin-left: 12px;
+}
+
+.alert-banner-dismiss:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.1);
+}
+

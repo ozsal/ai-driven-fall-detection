@@ -18,9 +18,19 @@ from database.sqlite_db import (
     count_fall_events, count_sensor_readings, count_active_devices,
     get_sensors as db_get_sensors, update_sensor_status
 )
+from database.alert_db import (
+    insert_alert, get_alerts, get_latest_alerts, get_alert_by_id,
+    acknowledge_alert, count_alerts, get_recent_sensor_readings
+)
+from alerts.alert_engine import AlertEngine
 from mqtt_broker.mqtt_client import MQTTClient
 from ml_models.fall_detector import FallDetector
 from alerts.alert_manager import AlertManager
+from alerts.alert_engine import AlertEngine
+from database.alert_db import (
+    insert_alert, get_alerts, get_latest_alerts, get_alert_by_id,
+    acknowledge_alert, count_alerts, get_recent_sensor_readings
+)
 from auth.routes import router as auth_router
 from auth.dependencies import get_current_user, require_viewer_or_above, require_admin
 
@@ -62,7 +72,7 @@ class AlertResponse(BaseModel):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize and cleanup resources"""
-    global mqtt_client, fall_detector, alert_manager
+    global mqtt_client, fall_detector, alert_manager, alert_engine
     
     # Startup
     print("Initializing Fall Detection System...")
@@ -100,6 +110,10 @@ async def lifespan(app: FastAPI):
     alert_manager = AlertManager()
     print("✓ Alert manager initialized")
     
+    # Initialize alert engine
+    alert_engine = AlertEngine()
+    print("✓ Alert engine initialized")
+    
     yield
     
     # Shutdown
@@ -118,6 +132,10 @@ app = FastAPI(
 
 # Register authentication routes
 app.include_router(auth_router)
+
+# Register alert routes
+from api.alerts import router as alerts_router
+app.include_router(alerts_router)
 
 # CORS middleware
 app.add_middleware(
@@ -292,6 +310,41 @@ async def handle_mqtt_message(topic: str, payload: dict):
             print(f"   Data: {sensor_data}")
             if sensor_type == "dht22":
                 print(f"   🌡️ DHT22 stored with: temp={sensor_data.get('temperature_c')}°C, humidity={sensor_data.get('humidity_percent')}%")
+            
+            # Evaluate alerts after storing reading
+            global alert_engine
+            if alert_engine:
+                try:
+                    # Get recent readings for trend analysis
+                    recent_readings = await get_recent_sensor_readings(
+                        device_id=device_id,
+                        sensor_type=sensor_type,
+                        minutes=10,
+                        limit=20
+                    )
+                    
+                    # Evaluate alerts
+                    alerts = alert_engine.evaluate_sensor_reading(
+                        device_id=device_id,
+                        sensor_type=sensor_type,
+                        sensor_data=sensor_data,
+                        timestamp=timestamp,
+                        recent_readings=recent_readings
+                    )
+                    
+                    # Store alerts in database and broadcast via WebSocket
+                    for alert in alerts:
+                        alert_id = await insert_alert(alert)
+                        print(f"🚨 ALERT #{alert_id}: {alert.get('message')} (Severity: {alert.get('severity')})")
+                        
+                        # Broadcast alert via WebSocket
+                        await broadcast_alert(alert)
+                        
+                except Exception as alert_error:
+                    print(f"⚠️ Alert evaluation error: {alert_error}")
+                    import traceback
+                    traceback.print_exc()
+                    
         except Exception as db_error:
             print(f"❌ DATABASE ERROR: Failed to store reading: {db_error}")
             import traceback
@@ -391,6 +444,14 @@ async def fetch_recent_room_sensor_data():
     return recent_readings
 
 # ==================== WebSocket Manager ====================
+async def broadcast_alert(alert: dict):
+    """Broadcast alert to all WebSocket connections"""
+    websocket_message = {
+        "type": "alert",
+        "alert": alert
+    }
+    await broadcast_to_websockets(websocket_message)
+
 async def broadcast_to_websockets(message: dict):
     """Broadcast message to all connected WebSocket clients"""
     disconnected = []

@@ -120,7 +120,7 @@ async def init_database():
         await db.execute("CREATE INDEX IF NOT EXISTS idx_auth_users_username ON auth_users(username)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_auth_users_email ON auth_users(email)")
         
-        # Alert logs table
+        # Alert logs table (for fall event alerts)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS alert_logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -131,6 +131,30 @@ async def init_database():
                 FOREIGN KEY (event_id) REFERENCES fall_events(id)
             )
         """)
+        
+        # Alerts table (for sensor-based alerts)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS alerts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                device_id TEXT NOT NULL,
+                alert_type TEXT NOT NULL,
+                message TEXT NOT NULL,
+                severity TEXT NOT NULL,
+                sensor_values TEXT NOT NULL,
+                triggered_at TIMESTAMP NOT NULL,
+                acknowledged BOOLEAN DEFAULT 0,
+                acknowledged_at TIMESTAMP,
+                acknowledged_by TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Create indexes for alerts
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_alerts_device ON alerts(device_id)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_alerts_type ON alerts(alert_type)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_alerts_severity ON alerts(severity)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_alerts_triggered ON alerts(triggered_at)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_alerts_acknowledged ON alerts(acknowledged)")
         
         # Create indexes for better performance
         await db.execute("CREATE INDEX IF NOT EXISTS idx_sensor_device ON sensor_readings(device_id)")

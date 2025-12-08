@@ -1,0 +1,9 @@
+.dashboard-with-alerts {
+  min-height: 100vh;
+  background: #f5f5f5;
+}
+
+.dashboard-content {
+  transition: margin-top 0.3s ease;
+}
+
