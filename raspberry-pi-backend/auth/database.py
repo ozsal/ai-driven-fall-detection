@@ -183,3 +183,4 @@ async def create_default_admin():
             except Exception as e:
                 print(f"⚠️  Could not create default admin: {e}")
 
+

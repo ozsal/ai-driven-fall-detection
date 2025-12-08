@@ -160,3 +160,4 @@ curl http://10.162.131.191:8000/api/sensors/dht22?limit=5
 # 3. Monitor backend logs for DHT22 messages
 ```
 
+

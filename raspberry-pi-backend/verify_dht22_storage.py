@@ -86,3 +86,4 @@ async def check_dht22_storage():
 if __name__ == "__main__":
     asyncio.run(check_dht22_storage())
 
+

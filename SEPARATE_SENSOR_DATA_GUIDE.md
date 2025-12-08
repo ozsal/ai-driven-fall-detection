@@ -273,3 +273,4 @@ curl http://10.162.131.191:8000/api/sensor-readings?sensor_type=dht22&limit=5
 The system is fully configured to handle all 3 sensors separately!
 
 
+

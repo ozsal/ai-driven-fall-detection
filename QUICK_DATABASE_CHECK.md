@@ -52,3 +52,4 @@ sqlite3 fall_detection.db "SELECT COUNT(*) FROM sensor_readings;"
 ```
 
 
+

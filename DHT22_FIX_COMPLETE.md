@@ -195,3 +195,4 @@ After uploading the fixed code, monitor ESP8266 serial output (115200 baud):
 
 The code is now ready to properly handle DHT22 sensor data. Upload it to your ESP8266 and monitor the serial output to diagnose any remaining hardware issues.
 
+

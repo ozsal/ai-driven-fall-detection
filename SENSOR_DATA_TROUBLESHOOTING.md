@@ -187,3 +187,4 @@ When everything is working:
 6. **Check topics** - Make sure sensors use correct topic format
 
 
+
