@@ -5,6 +5,7 @@ Authentication routes
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from datetime import timedelta
+from typing import List
 from auth.models import UserCreate, UserResponse, UserLogin, Token, UserUpdate
 from auth.database import (
     create_user, get_user_by_username, get_all_users, 
