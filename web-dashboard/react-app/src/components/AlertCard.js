@@ -113,3 +113,5 @@ const AlertCard = ({ alert, onAcknowledge, onViewDetails }) => {
 export default AlertCard;
 
 
+
+

@@ -110,17 +110,30 @@ async def get_alert_by_id(alert_id: int) -> Optional[Dict[str, Any]]:
 
 async def acknowledge_alert(alert_id: int, acknowledged_by: Optional[str] = None) -> bool:
     """Acknowledge an alert"""
-    async with aiosqlite.connect(DB_PATH) as db:
-        cursor = await db.execute("""
-            UPDATE alerts 
-            SET acknowledged = 1, 
-                acknowledged_at = ?,
-                acknowledged_by = ?
-            WHERE id = ?
-        """, (datetime.utcnow().isoformat(), acknowledged_by, alert_id))
-        
-        await db.commit()
-        return cursor.rowcount > 0
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            # Use CURRENT_TIMESTAMP for SQLite compatibility
+            if acknowledged_by:
+                cursor = await db.execute("""
+                    UPDATE alerts 
+                    SET acknowledged = 1, 
+                        acknowledged_at = CURRENT_TIMESTAMP,
+                        acknowledged_by = ?
+                    WHERE id = ?
+                """, (acknowledged_by, alert_id))
+            else:
+                cursor = await db.execute("""
+                    UPDATE alerts 
+                    SET acknowledged = 1, 
+                        acknowledged_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                """, (alert_id,))
+            
+            await db.commit()
+            return cursor.rowcount > 0
+    except Exception as e:
+        print(f"Error acknowledging alert {alert_id}: {e}")
+        return False
 
 async def count_alerts(
     device_id: Optional[str] = None,
@@ -191,5 +204,6 @@ async def get_recent_sensor_readings(
                     row["data"] = {}
         
         return rows
+
 
 

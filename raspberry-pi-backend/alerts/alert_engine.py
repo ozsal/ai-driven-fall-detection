@@ -182,22 +182,46 @@ class AlertEngine:
         timestamp: int,
         recent_readings: Optional[List[Dict[str, Any]]]
     ) -> List[Dict[str, Any]]:
-        """Check for fire risk conditions"""
+        """Check for fire risk conditions and occupancy for evacuation alerts"""
         alerts = []
         
-        # Condition 1: Temperature exceeds fire risk threshold
+        # Check for room occupancy (motion detected)
+        room_occupied = self._check_room_occupancy(recent_readings)
+        
+        # Condition 1: Temperature exceeds fire risk threshold (40°C)
         if temperature >= self.temp_fire_risk:
-            alerts.append({
+            # Base fire risk alert
+            fire_alert = {
                 "device_id": device_id,
                 "alert_type": AlertType.FIRE_RISK.value,
                 "severity": AlertSeverity.EXTREME.value,
                 "message": f"🔥 EXTREME FIRE RISK: Temperature reached {temperature:.1f}°C (threshold: {self.temp_fire_risk}°C)",
                 "sensor_values": {
                     "temperature_c": temperature,
-                    "humidity_percent": humidity
+                    "humidity_percent": humidity,
+                    "room_occupied": room_occupied
                 },
                 "triggered_at": datetime.utcnow().isoformat()
-            })
+            }
+            alerts.append(fire_alert)
+            
+            # If room is occupied, add evacuation alert
+            if room_occupied:
+                evacuation_alert = {
+                    "device_id": device_id,
+                    "alert_type": AlertType.FIRE_RISK.value,
+                    "severity": AlertSeverity.EXTREME.value,
+                    "message": f"🚨 EVACUATE IMMEDIATELY: Fire risk detected! Temperature {temperature:.1f}°C. People detected in room - EVACUATE NOW!",
+                    "sensor_values": {
+                        "temperature_c": temperature,
+                        "humidity_percent": humidity,
+                        "room_occupied": True,
+                        "motion_detected": True,
+                        "evacuation_required": True
+                    },
+                    "triggered_at": datetime.utcnow().isoformat()
+                }
+                alerts.append(evacuation_alert)
         
         # Condition 2: Rapid temperature spike (indicates fire)
         if recent_readings:
@@ -211,7 +235,7 @@ class AlertEngine:
                 temp_increase = temperature - max_recent_temp
                 
                 if temp_increase >= self.temp_spike_threshold:
-                    alerts.append({
+                    spike_alert = {
                         "device_id": device_id,
                         "alert_type": AlertType.FIRE_RISK.value,
                         "severity": AlertSeverity.HIGH.value,
@@ -219,10 +243,30 @@ class AlertEngine:
                         "sensor_values": {
                             "temperature_c": temperature,
                             "humidity_percent": humidity,
-                            "temperature_increase": temp_increase
+                            "temperature_increase": temp_increase,
+                            "room_occupied": room_occupied
                         },
                         "triggered_at": datetime.utcnow().isoformat()
-                    })
+                    }
+                    alerts.append(spike_alert)
+                    
+                    # If room is occupied and temperature is high, add evacuation alert
+                    if room_occupied and temperature >= 35.0:
+                        evacuation_alert = {
+                            "device_id": device_id,
+                            "alert_type": AlertType.FIRE_RISK.value,
+                            "severity": AlertSeverity.EXTREME.value,
+                            "message": f"🚨 EVACUATE: Rapid temperature rise detected! People in room - EVACUATE IMMEDIATELY!",
+                            "sensor_values": {
+                                "temperature_c": temperature,
+                                "humidity_percent": humidity,
+                                "temperature_increase": temp_increase,
+                                "room_occupied": True,
+                                "evacuation_required": True
+                            },
+                            "triggered_at": datetime.utcnow().isoformat()
+                        }
+                        alerts.append(evacuation_alert)
         
         # Condition 3: Unexpected humidity drop (fire consumes moisture)
         if recent_readings:
@@ -250,6 +294,34 @@ class AlertEngine:
                     })
         
         return alerts
+    
+    def _check_room_occupancy(
+        self,
+        recent_readings: Optional[List[Dict[str, Any]]]
+    ) -> bool:
+        """
+        Check if room is occupied based on recent motion sensor readings
+        
+        Args:
+            recent_readings: Recent sensor readings
+            
+        Returns:
+            True if room appears to be occupied, False otherwise
+        """
+        if not recent_readings:
+            return False
+        
+        # Check for motion in recent PIR sensor readings (last 5 minutes)
+        # Consider room occupied if motion detected in recent readings
+        motion_readings = [
+            r for r in recent_readings[-20:]  # Check last 20 readings
+            if r.get("sensor_type") == "pir"
+            and r.get("data", {}).get("motion_detected", False)
+        ]
+        
+        # Room is considered occupied if motion detected in recent readings
+        # (within last 2-3 minutes)
+        return len(motion_readings) > 0
     
     def _check_temperature(
         self,

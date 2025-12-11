@@ -121,17 +121,29 @@ async def acknowledge_alert_endpoint(
     current_user: dict = Depends(require_viewer_or_above)
 ):
     """Acknowledge an alert (requires authentication)"""
-    # Check if alert exists
-    alert = await get_alert_by_id(alert_id)
-    if not alert:
-        raise HTTPException(status_code=404, detail="Alert not found")
-    
-    # Acknowledge alert
-    success = await acknowledge_alert(alert_id, acknowledged_by=current_user.get("username"))
-    if not success:
-        raise HTTPException(status_code=500, detail="Failed to acknowledge alert")
-    
-    return {"message": "Alert acknowledged", "alert_id": alert_id}
+    try:
+        # Check if alert exists
+        alert = await get_alert_by_id(alert_id)
+        if not alert:
+            raise HTTPException(status_code=404, detail=f"Alert with ID {alert_id} not found")
+        
+        # Check if already acknowledged
+        if alert.get("acknowledged"):
+            return {"message": "Alert already acknowledged", "alert_id": alert_id, "already_acknowledged": True}
+        
+        # Get username from current_user (could be "username" or "sub" depending on token structure)
+        username = current_user.get("username") or current_user.get("sub") or "unknown"
+        
+        # Acknowledge alert
+        success = await acknowledge_alert(alert_id, acknowledged_by=username)
+        if not success:
+            raise HTTPException(status_code=500, detail=f"Failed to acknowledge alert {alert_id}. The alert may not exist or may have already been acknowledged.")
+        
+        return {"message": "Alert acknowledged successfully", "alert_id": alert_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error acknowledging alert: {str(e)}")
 
 @router.get("/stats/summary")
 async def get_alert_stats(

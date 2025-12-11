@@ -56,15 +56,17 @@ def generate_temperature_anomaly_data(n_samples=5000):
     return np.array(data), np.array(labels)
 
 def generate_fire_risk_data(n_samples=3000):
-    """Generate synthetic fire risk data"""
+    """Generate synthetic fire risk data with emphasis on temperature > 40°C"""
     np.random.seed(42)
     
     data = []
     labels = []
     
-    # Normal conditions (no fire risk)
+    # Normal conditions (no fire risk) - ensure all below 40°C
     for _ in range(n_samples // 2):
         temp = np.random.normal(22.0, 3.0)
+        # Ensure temperature stays below 40°C
+        temp = min(temp, 38.0)
         humidity = np.random.normal(45.0, 10.0)
         temp_rate = np.random.normal(0, 0.2)  # Slow change
         hum_rate = np.random.normal(0, 1.0)
@@ -72,11 +74,19 @@ def generate_fire_risk_data(n_samples=3000):
         data.append([temp, humidity, temp_rate, hum_rate])
         labels.append(0)  # No fire risk
     
-    # Fire risk conditions
+    # Fire risk conditions - emphasize temperature > 40°C
     for _ in range(n_samples // 2):
-        temp = np.random.normal(38.0, 5.0)  # High temperature
+        # Strong fire risk: temperature > 40°C (primary indicator)
+        if np.random.random() > 0.3:  # 70% of fire risk cases have temp > 40°C
+            temp = np.random.normal(45.0, 5.0)  # High temperature, centered around 45°C
+            temp = max(temp, 40.1)  # Ensure it's above 40°C
+        else:
+            # Other fire risk indicators (rapid rise, low humidity)
+            temp = np.random.normal(38.0, 3.0)  # Still high but below 40°C
+            temp = min(temp, 39.9)  # Ensure it's below 40°C
+        
         humidity = np.random.normal(25.0, 10.0)  # Low humidity (fire consumes moisture)
-        temp_rate = np.random.normal(2.0, 1.0)  # Rapid temperature increase
+        temp_rate = np.random.normal(2.5, 1.5)  # Rapid temperature increase
         hum_rate = np.random.normal(-3.0, 1.5)  # Rapid humidity decrease
         
         data.append([temp, humidity, temp_rate, hum_rate])
@@ -337,4 +347,6 @@ if __name__ == "__main__":
         print(f"\n❌ Error training models: {e}")
         import traceback
         traceback.print_exc()
+
+
 

@@ -165,9 +165,16 @@ class MLAlertPredictor:
             is_fire_risk = prediction == 1 or (probability and probability > 0.6)
             
             if is_fire_risk:
-                severity = "extreme" if probability and probability > 0.8 else "high"
+                # Check for room occupancy
+                room_occupied = self._check_room_occupancy(recent_readings)
                 
-                return {
+                # Determine severity - if temp > 40°C, always extreme
+                if temperature >= 40.0:
+                    severity = "extreme"
+                else:
+                    severity = "extreme" if probability and probability > 0.8 else "high"
+                
+                alert = {
                     "alert_type": "fire_risk",
                     "severity": severity,
                     "message": f"🔥 ML DETECTED: Fire risk predicted (temp: {temperature:.1f}°C, confidence: {probability*100:.1f}%)",
@@ -175,10 +182,18 @@ class MLAlertPredictor:
                         "temperature_c": temperature,
                         "humidity_percent": humidity,
                         "ml_confidence": probability,
-                        "ml_prediction": int(prediction)
+                        "ml_prediction": int(prediction),
+                        "room_occupied": room_occupied
                     },
                     "ml_based": True
                 }
+                
+                # Add evacuation message if room is occupied and temperature is high
+                if room_occupied and temperature >= 40.0:
+                    alert["message"] = f"🚨 EVACUATE: ML detected fire risk! Temperature {temperature:.1f}°C. People in room - EVACUATE NOW!"
+                    alert["sensor_values"]["evacuation_required"] = True
+                
+                return alert
         except Exception as e:
             print(f"⚠️ Error in ML fire risk prediction: {e}")
             return self._rule_based_fire_risk(temperature, humidity, recent_readings)
@@ -391,19 +406,48 @@ class MLAlertPredictor:
         humidity: float,
         recent_readings: Optional[List[Dict[str, Any]]]
     ) -> Optional[Dict[str, Any]]:
-        """Fallback: Rule-based fire risk detection"""
-        if temperature > 40.0:
-            return {
+        """Fallback: Rule-based fire risk detection with 40°C threshold"""
+        # Primary indicator: Temperature > 40°C
+        if temperature >= 40.0:
+            # Check for room occupancy
+            room_occupied = self._check_room_occupancy(recent_readings)
+            
+            alert = {
                 "alert_type": "fire_risk",
                 "severity": "extreme",
                 "message": f"🔥 RULE-BASED: High temperature fire risk ({temperature:.1f}°C)",
                 "sensor_values": {
                     "temperature_c": temperature,
-                    "humidity_percent": humidity
+                    "humidity_percent": humidity,
+                    "room_occupied": room_occupied
                 },
                 "ml_based": False
             }
+            
+            # Add evacuation message if room is occupied
+            if room_occupied:
+                alert["message"] = f"🚨 EVACUATE: Fire risk detected! Temperature {temperature:.1f}°C. People in room - EVACUATE NOW!"
+                alert["sensor_values"]["evacuation_required"] = True
+            
+            return alert
         return None
+    
+    def _check_room_occupancy(
+        self,
+        recent_readings: Optional[List[Dict[str, Any]]]
+    ) -> bool:
+        """Check if room is occupied based on motion sensor readings"""
+        if not recent_readings:
+            return False
+        
+        # Check for motion in recent PIR sensor readings
+        motion_readings = [
+            r for r in recent_readings[-20:]
+            if r.get("sensor_type") == "pir"
+            and r.get("data", {}).get("motion_detected", False)
+        ]
+        
+        return len(motion_readings) > 0
     
     def _determine_severity_from_probability(
         self,
