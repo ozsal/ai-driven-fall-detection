@@ -164,7 +164,8 @@ class MLAlertPredictor:
             # Fire risk detected
             is_fire_risk = prediction == 1 or (probability and probability > 0.6)
             
-            if is_fire_risk:
+            # Only alert if temperature is above 30°C (user requirement)
+            if is_fire_risk and temperature > 30.0:
                 # Check for room occupancy
                 room_occupied = self._check_room_occupancy(recent_readings)
                 
