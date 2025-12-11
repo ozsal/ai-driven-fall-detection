@@ -27,10 +27,11 @@ const char* password = "@@Ozsal23##";
 
 // ==================== MQTT Configuration ====================
 const char* mqtt_server = "10.162.131.191";  // Raspberry Pi IP address
-const int mqtt_port = 1883;
-const char* mqtt_user = "";
+const int mqtt_port = 1883;  // Standard MQTT port
+const char* mqtt_user = "esp8266_user";
 const char* mqtt_password = "";
 const char* mqtt_client_id = "";
+const int mqtt_qos = 1;  // QoS level 1 for reliable message delivery
 
 // ==================== Sensor Pin Definitions ====================
 #define PIR_PIN 14          // GPIO14 (D5) - PIR motion sensor
@@ -169,14 +170,15 @@ void reconnect_mqtt() {
     if (client.connect(mqtt_client_id, mqtt_user, mqtt_password)) {
       Serial.println("connected!");
       
-      // Subscribe to control topics
+      // Subscribe to control topics with QoS 1
       String subscribe_topic = "devices/" + String(device_id) + "/control";
-      client.subscribe(subscribe_topic.c_str());
-      Serial.println("Subscribed to: " + subscribe_topic);
+      client.subscribe(subscribe_topic.c_str(), mqtt_qos);
+      Serial.println("Subscribed to: " + subscribe_topic + " (QoS " + String(mqtt_qos) + ")");
       
-      // Publish online status
+      // Publish online status with QoS 1
       String status_topic = "devices/" + String(device_id) + "/status";
-      client.publish(status_topic.c_str(), "online");
+      client.publish(status_topic.c_str(), "online", mqtt_qos);
+      Serial.println("Published online status (QoS " + String(mqtt_qos) + ")");
       
       blink_led(2, 200);
     } else {
@@ -316,15 +318,24 @@ void publish_sensor_data() {
   String topic_dht22 = "sensors/dht22/" + String(device_id);
   String topic_combined = "sensors/combined/" + String(device_id);
   
-  // Publish PIR sensor data (motion detected: 1 or 0)
-  client.publish(topic_pir.c_str(), pirState ? "1" : "0");
-  Serial.print("Published PIR: ");
-  Serial.println(pirState ? "1" : "0");
+  // Publish PIR sensor data (motion detected: 1 or 0) with QoS 1
+  bool pir_published = client.publish(topic_pir.c_str(), pirState ? "1" : "0", mqtt_qos);
+  if (pir_published) {
+    Serial.print("✓ Published PIR (QoS " + String(mqtt_qos) + "): ");
+    Serial.println(pirState ? "1" : "0");
+  } else {
+    Serial.println("✗ Failed to publish PIR data!");
+  }
   
-  // Publish Ultrasonic sensor data (distance in cm)
-  client.publish(topic_ultrasonic.c_str(), String(distance).c_str());
-  Serial.print("Published Ultrasonic: ");
-  Serial.println(distance);
+  // Publish Ultrasonic sensor data (distance in cm) with QoS 1
+  String distance_str = String(distance);
+  bool ultrasonic_published = client.publish(topic_ultrasonic.c_str(), distance_str.c_str(), mqtt_qos);
+  if (ultrasonic_published) {
+    Serial.print("✓ Published Ultrasonic (QoS " + String(mqtt_qos) + "): ");
+    Serial.println(distance);
+  } else {
+    Serial.println("✗ Failed to publish Ultrasonic data!");
+  }
   
   // Publish DHT22 sensor data (temperature and humidity as JSON)
   // Only publish if we have valid temperature and humidity readings (both must be valid)
@@ -337,9 +348,9 @@ void publish_sensor_data() {
     char dht22_buffer[256];
     serializeJson(dht22_doc, dht22_buffer);
     
-    bool published = client.publish(topic_dht22.c_str(), dht22_buffer);
+    bool published = client.publish(topic_dht22.c_str(), dht22_buffer, mqtt_qos);
     if (published) {
-      Serial.print("✓ Published DHT22: ");
+      Serial.print("✓ Published DHT22 (QoS " + String(mqtt_qos) + "): ");
       Serial.println(dht22_buffer);
     } else {
       Serial.println("✗ Failed to publish DHT22 data to MQTT!");
@@ -353,12 +364,16 @@ void publish_sensor_data() {
     Serial.println("  Check DHT22 sensor connection and wiring!");
   }
   
-  // Publish combined JSON data (all sensors together)
-  client.publish(topic_combined.c_str(), json_buffer);
-  Serial.print("Published Combined: ");
-  Serial.println(json_buffer);
+  // Publish combined JSON data (all sensors together) with QoS 1
+  bool combined_published = client.publish(topic_combined.c_str(), json_buffer, mqtt_qos);
+  if (combined_published) {
+    Serial.print("✓ Published Combined (QoS " + String(mqtt_qos) + "): ");
+    Serial.println(json_buffer);
+  } else {
+    Serial.println("✗ Failed to publish Combined data!");
+  }
   
-  Serial.println("All sensor data published to MQTT");
+  Serial.println("All sensor data published to MQTT (QoS " + String(mqtt_qos) + ")");
 }
 
 // ==================== LED Blink Helper ====================

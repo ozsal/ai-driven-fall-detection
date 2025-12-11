@@ -56,6 +56,16 @@ class MLAlertPredictor:
         Returns:
             Alert dictionary if anomaly detected, None otherwise
         """
+        # Normal temperature range: 18-26°C (from AlertEngine)
+        # Don't trigger ML alerts for clearly normal temperatures
+        # This prevents false positives when ML model misclassifies normal temps
+        if 18.0 <= temperature <= 26.0:
+            # Only check for anomalies if we have sufficient historical data
+            # and the temperature is actually outside normal range
+            if recent_readings is None or len(recent_readings) < 5:
+                # Not enough data for reliable ML prediction, skip ML alert
+                return None
+        
         # Try to load temperature anomaly model
         model = self.model_loader.get_model("temperature_anomaly.pkl")
         
@@ -90,6 +100,13 @@ class MLAlertPredictor:
             
             # If anomaly detected (prediction == 1 or probability > threshold)
             is_anomaly = prediction == 1 or (probability and probability > 0.7)
+            
+            # Additional safety check: Don't alert for normal temperatures even if ML says anomaly
+            # This prevents false positives from poorly trained models
+            if is_anomaly and 18.0 <= temperature <= 26.0:
+                # Temperature is in normal range, ignore ML prediction (likely false positive)
+                print(f"⚠️ ML detected anomaly for normal temperature {temperature:.1f}°C, ignoring (normal range: 18-26°C)")
+                return None
             
             if is_anomaly:
                 severity = self._determine_severity_from_probability(probability, temperature)
