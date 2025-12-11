@@ -13,36 +13,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-@dataclass
-class PendingMessage:
-    """Represents a message waiting for acknowledgment"""
-    message_id: int
-    topic: str
-    payload: str
-    qos: int
-    timestamp: float
-    retry_count: int = 0
-    max_retries: int = 3
-    retry_delay: float = 2.0  # seconds
-
-@dataclass
-class MessageStats:
-    """Message delivery statistics"""
-    total_published: int = 0
-    total_acknowledged: int = 0
-    total_failed: int = 0
-    total_received: int = 0
-    total_retried: int = 0
-    pending_messages: int = 0
-    
-    def get_reliability(self) -> float:
-        """Calculate message delivery reliability percentage"""
-        if self.total_published == 0:
-            return 100.0
-        successful = self.total_acknowledged
-        total_attempts = self.total_published
-        return (successful / total_attempts) * 100.0
-
 class MQTTClient:
     """Async MQTT client wrapper"""
     
@@ -52,10 +22,17 @@ class MQTTClient:
         self.connected = False
         self.event_loop: Optional[asyncio.AbstractEventLoop] = None
         self.broker_host = os.getenv("MQTT_BROKER_HOST", "10.162.131.191")
-        self.broker_port = int(os.getenv("MQTT_BROKER_PORT", 1883))  # Default to 1883 (non-encrypted) to match ESP8266
+        self.broker_port = int(os.getenv("MQTT_BROKER_PORT", 1883))
         self.username = os.getenv("MQTT_USERNAME", "")
         self.password = os.getenv("MQTT_PASSWORD", "")
         self.client_id = "raspberry_pi_backend"
+        
+        # TLS/SSL Configuration
+        self.use_tls = os.getenv("MQTT_USE_TLS", "false").lower() in ("true", "1", "yes")
+        self.ca_cert = os.getenv("MQTT_CA_CERT", None)  # Path to CA certificate
+        self.client_cert = os.getenv("MQTT_CLIENT_CERT", None)  # Path to client certificate (for mutual TLS)
+        self.client_key = os.getenv("MQTT_CLIENT_KEY", None)  # Path to client private key (for mutual TLS)
+        self.tls_insecure = os.getenv("MQTT_TLS_INSECURE", "false").lower() in ("true", "1", "yes")  # Skip certificate verification (not recommended)
         
         # Topics to subscribe
         self.topics = [
@@ -77,7 +54,45 @@ class MQTTClient:
         # Store event loop reference for use in callbacks
         self.event_loop = asyncio.get_event_loop()
         
-        self.client = mqtt.Client(client_id=self.client_id)
+        self.client = mqtt.Client(client_id=self.client_id, protocol=mqtt.MQTTv311)
+        
+        # Configure TLS/SSL if enabled
+        if self.use_tls:
+            try:
+                import ssl
+                print(f"  Configuring TLS/SSL connection...")
+                
+                # Set TLS version (TLSv1.2 or TLSv1.3)
+                tls_version = ssl.PROTOCOL_TLSv1_2
+                self.client.tls_set(
+                    ca_certs=self.ca_cert,
+                    certfile=self.client_cert,
+                    keyfile=self.client_key,
+                    cert_reqs=ssl.CERT_REQUIRED if not self.tls_insecure else ssl.CERT_NONE,
+                    tls_version=tls_version,
+                    ciphers=None
+                )
+                
+                # Disable hostname verification if insecure mode (not recommended for production)
+                if self.tls_insecure:
+                    print(f"  ⚠️  WARNING: TLS insecure mode enabled - certificate verification disabled!")
+                    self.client.tls_insecure_set(True)
+                else:
+                    self.client.tls_insecure_set(False)
+                
+                print(f"  ✓ TLS/SSL configured")
+                if self.ca_cert:
+                    print(f"    CA Certificate: {self.ca_cert}")
+                if self.client_cert:
+                    print(f"    Client Certificate: {self.client_cert}")
+                    print(f"    Mutual TLS (mTLS) enabled")
+            except ImportError:
+                print(f"  ⚠️  ERROR: SSL module not available. TLS disabled.")
+                self.use_tls = False
+            except Exception as e:
+                print(f"  ⚠️  ERROR: Failed to configure TLS: {e}")
+                raise
+        
         # Only set username/password if provided (some brokers don't require auth)
         if self.username and self.password:
             self.client.username_pw_set(self.username, self.password)
@@ -91,14 +106,16 @@ class MQTTClient:
         self.client.on_disconnect = self._on_disconnect
         
         try:
-            print(f"MQTT client connecting to {self.broker_host}:{self.broker_port}")
+            protocol_str = "TLS/SSL" if self.use_tls else "plain"
+            print(f"MQTT client connecting to {self.broker_host}:{self.broker_port} ({protocol_str})")
             self.client.connect(self.broker_host, self.broker_port, 60)
             self.client.loop_start()
             # Wait a moment for connection to establish
             import time
             time.sleep(1)
             if self.connected:
-                print(f"✓ MQTT connection established to {self.broker_host}:{self.broker_port}")
+                protocol_str = "TLS/SSL" if self.use_tls else "plain"
+                print(f"✓ MQTT connection established to {self.broker_host}:{self.broker_port} ({protocol_str})")
             else:
                 print(f"⚠️  MQTT connection initiated but not yet confirmed")
         except Exception as e:
