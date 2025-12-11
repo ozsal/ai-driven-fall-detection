@@ -27,11 +27,22 @@ const char* password = "@@Ozsal23##";
 
 // ==================== MQTT Configuration ====================
 const char* mqtt_server = "192.168.1.100";  // Raspberry Pi IP address
-const int mqtt_port = 1883;
+const int mqtt_port = 1883;  // Use 8883 for TLS/SSL
 const char* mqtt_user = "esp8266_user";
 const char* mqtt_password = "esp8266_password";
 const char* mqtt_client_id = "ESP8266_Sensor_Node_01";
 const int mqtt_qos = 1;  // QoS level 1 for reliable message delivery
+
+// ==================== TLS/SSL Configuration ====================
+// Note: TLS/SSL support requires additional libraries and memory
+// Enable only if you have sufficient flash memory and need encryption
+#define USE_TLS false  // Set to true to enable TLS/SSL (requires WiFiClientSecure)
+
+// For TLS support, uncomment and include your CA certificate:
+// const char* ca_cert = \
+//   "-----BEGIN CERTIFICATE-----\n" \
+//   "YOUR_CA_CERTIFICATE_HERE\n" \
+//   "-----END CERTIFICATE-----\n";
 
 // ==================== Sensor Pin Definitions ====================
 #define PIR_PIN 14          // GPIO14 (D5) - PIR motion sensor
@@ -45,8 +56,14 @@ const int mqtt_qos = 1;  // QoS level 1 for reliable message delivery
 DHT dht(DHT_PIN, DHT_TYPE);
 
 // ==================== Global Variables ====================
-WiFiClient espClient;
-PubSubClient client(espClient);
+#if USE_TLS
+  #include <WiFiClientSecure.h>
+  WiFiClientSecure espClient;
+  PubSubClient client(espClient);
+#else
+  WiFiClient espClient;
+  PubSubClient client(espClient);
+#endif
 
 unsigned long lastMsg = 0;
 const unsigned long SENSOR_INTERVAL = 2000;  // Read sensors every 2 seconds
@@ -100,6 +117,16 @@ void setup() {
   // Setup MQTT
   client.setServer(mqtt_server, mqtt_port);
   client.setCallback(mqtt_callback);
+  
+  // Configure TLS if enabled
+  #if USE_TLS
+    Serial.println("Configuring TLS/SSL...");
+    espClient.setCACert(ca_cert);
+    // For mutual TLS, also set client certificate:
+    // espClient.setCertificate(client_cert);
+    // espClient.setPrivateKey(client_key);
+    Serial.println("TLS/SSL configured");
+  #endif
   
   Serial.println("Setup complete. Starting main loop...");
 }
@@ -165,7 +192,11 @@ void setup_wifi() {
 // ==================== MQTT Reconnection ====================
 void reconnect_mqtt() {
   while (!client.connected()) {
-    Serial.print("Attempting MQTT connection...");
+    Serial.print("Attempting MQTT connection");
+    #if USE_TLS
+      Serial.print(" (TLS/SSL)");
+    #endif
+    Serial.print("...");
     
     if (client.connect(mqtt_client_id, mqtt_user, mqtt_password)) {
       Serial.println("connected!");
