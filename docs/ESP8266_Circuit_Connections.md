@@ -84,3 +84,8 @@ Based on your specifications:
 | GND | All GND Pins | Common Ground |
 
 
+
+
+
+
+

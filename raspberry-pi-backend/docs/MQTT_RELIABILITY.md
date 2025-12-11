@@ -266,3 +266,4 @@ The MQTT reliability implementation ensures **99.8% reliable message delivery** 
 
 This provides dependable communication between sensor nodes and the backend, even during intermittent network disruptions.
 
+

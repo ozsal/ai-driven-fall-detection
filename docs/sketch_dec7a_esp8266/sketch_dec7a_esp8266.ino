@@ -30,7 +30,7 @@ const char* mqtt_server = "10.162.131.191";  // Raspberry Pi IP address
 const int mqtt_port = 1883;
 const char* mqtt_user = "";
 const char* mqtt_password = "";
-const char* mqtt_client_id = "ESP8266_Sensor_Node_01";
+const char* mqtt_client_id = "";
 
 // ==================== Sensor Pin Definitions ====================
 #define PIR_PIN 14          // GPIO14 (D5) - PIR motion sensor
