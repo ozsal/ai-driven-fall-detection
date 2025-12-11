@@ -490,6 +490,23 @@ async def health_check():
         "timestamp": datetime.utcnow().isoformat()
     }
 
+@app.get("/api/mqtt/stats")
+async def get_mqtt_stats():
+    """Get MQTT message delivery statistics and reliability metrics"""
+    if not mqtt_client:
+        return {
+            "error": "MQTT client not initialized",
+            "mqtt_available": False
+        }
+    
+    stats = mqtt_client.get_stats()
+    stats["mqtt_connected"] = mqtt_client.is_connected()
+    stats["broker_host"] = mqtt_client.broker_host
+    stats["broker_port"] = mqtt_client.broker_port
+    stats["timestamp"] = datetime.utcnow().isoformat()
+    
+    return stats
+
 @app.get("/api/devices", response_model=List[DeviceStatus])
 async def get_devices_endpoint(current_user: dict = Depends(require_viewer_or_above)):
     """Get all device statuses (requires authentication)"""
